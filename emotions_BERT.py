@@ -33,8 +33,6 @@ emotions_encoded = emotions.map(tokenize, batched=True, batch_size=None) #new da
 
 emotions_encoded.set_format('tf',columns=['label', 'input_ids', 'token_type_ids', 'attention_mask']) # setting 'input_ids', 'attention_mask','token_type_ids', and 'label' colums to the tensorflow format
 
-print(emotions_encoded)
-
 
 BATCH_SIZE = 64 # setting BATCH_SIZE to 64
 
@@ -88,6 +86,6 @@ classifier.compile(
 #     epochs=3
 # )
 
-#print (history)
+
 
 #classifier.evaluate(test_dataset)
