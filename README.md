@@ -1,3 +1,5 @@
+## na valw to .ipynb notebook + eval_notrekated
+
 # PyTorch Active Learning
 
 Library for common Active Learning methods to accompany:  
