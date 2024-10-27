@@ -1,4 +1,4 @@
-## na valw to .ipynb notebook + eval_notrekated
+### na valw to .ipynb notebook + eval_not_related
 
 # PyTorch Active Learning
 
