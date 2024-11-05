@@ -1,4 +1,4 @@
-# The current repository uses Active learning techniques from Robert Monarch's repo: https://github.com/rmunro/pytorch_active_learning.git 
+## The current repository uses Active learning techniques from Robert Monarch's repo: https://github.com/rmunro/pytorch_active_learning.git 
 
 # PyTorch Active Learning
 
