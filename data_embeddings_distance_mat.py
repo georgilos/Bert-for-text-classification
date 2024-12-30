@@ -38,7 +38,7 @@ def generate_embeddings(texts, tokenizer, model, batch_size=16, use_cls=True):
 def main():
 
     # Load unlabeled data
-    unlabeled_data = pd.read_csv('unlabeled_data/cleaned_texts_unlabeled.csv', header=None, encoding='utf-8')
+    unlabeled_data = pd.read_csv('data/unlabeled_data/cleaned_texts_unlabeled.csv', header=None, encoding='utf-8')
     # Because the .csv file has no headers, we must assign them
     unlabeled_data.columns = ['ID', 'TEXT']
     # Randomly select 100 rows
