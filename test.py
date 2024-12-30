@@ -5,7 +5,7 @@ import pandas as pd
 from transformers import BertTokenizer, BertModel
 from collections import Counter
 from scipy.spatial.distance import cdist
-from constrained_clustering import constrained_dbscan_with_constraints, initialize_memory_bank
+from constrained_clustering import constrained_dbscan_with_constraints, merge_small_clusters, initialize_memory_bank
 from uncertain_pairs import select_uncertain_pairs, annotate_and_update_constraints
 from data_embeddings_distance_mat import generate_embeddings
 from hybrid_loss_training import calculate_contrastive_loss, calculate_support_pair_loss
@@ -38,9 +38,10 @@ def iterative_training(all_texts, max_iterations=4, margin=1.0, temperature=0.5,
         min_samples = int(input(f"Enter the min_samples value for initial clustering (default suggestion: 2): ") or 2)
 
         # Perform initial clustering
-        adjusted_labels = constrained_dbscan_with_constraints(distance_matrix, eps, min_samples, must_link=[],
+        adjusted_labels, cannot_link_dict = constrained_dbscan_with_constraints(distance_matrix, eps, min_samples, must_link=[],
                                                               cannot_link=[])
-
+        print("Now merging clusters with instance<min_samples")
+        adjusted_labels = merge_small_clusters(distance_matrix, adjusted_labels, cannot_link_dict, min_samples)
         # Print clustering results
         unique_clusters = np.unique(adjusted_labels)
         print(f"\nInitial Clustering Results (eps={eps}, min_samples={min_samples}):")
@@ -132,9 +133,9 @@ def iterative_training(all_texts, max_iterations=4, margin=1.0, temperature=0.5,
             min_samples = int(input(f"Enter the min_samples value for clustering (default suggestion: 2): ") or 2)
 
             # Perform clustering
-            adjusted_labels = constrained_dbscan_with_constraints(distance_matrix, eps, min_samples, must_link_pairs,
+            adjusted_labels, cannot_link_dict = constrained_dbscan_with_constraints(distance_matrix, eps, min_samples, must_link_pairs,
                                                                   cannot_link_pairs)
-
+            adjusted_labels = merge_small_clusters(distance_matrix, adjusted_labels, cannot_link_dict, min_samples)
             # Print clustering results
             unique_clusters = np.unique(adjusted_labels)
             print(f"\nClustering Results (eps={eps}, min_samples={min_samples}):")
@@ -179,12 +180,14 @@ def iterative_training(all_texts, max_iterations=4, margin=1.0, temperature=0.5,
 
     # Save cluster centroids and labels for inference
     torch.save(memory_bank, "./models/final_memory_bank.pt")
+    # Convert numpy.int64 keys to int
+    cluster_labels = {int(k): v for k, v in cluster_labels.items()}
     with open("./models/cluster_labels.json", "w") as f:
         import json
         json.dump(cluster_labels, f)
 
     print("Final memory bank and cluster labels saved!")
-
+    print(cluster_labels)
     # Save the fine-tuned model
     save_path = "./models/fine_tuned_bert.pth"
     os.makedirs(os.path.dirname(save_path), exist_ok=True)
@@ -196,9 +199,16 @@ def main():
     data_path = "data/unlabeled_data/cleaned_texts_unlabeled.csv"  # Path to the CSV file
     sampled_data = pd.read_csv(data_path, header=None)  # Load the CSV file (no headers)
     sampled_data.columns = ['ID', 'TEXT']  # Add column names to the CSV
-    sampled_data = sampled_data.sample(n=1000, random_state=42)  # Randomly sample 1,000 rows
+
+    # Clean and validate TEXT column
+    sampled_data['TEXT'] = sampled_data['TEXT'].fillna('').astype(str).str.replace(r'[\ufe0f\x0f]', '', regex=True)
+    sampled_data = sampled_data[sampled_data['TEXT'].str.strip() != '']
+
+    # Sample and prepare the data
+    sampled_data = sampled_data.sample(n=300, random_state=55)  # Randomly sample 100 rows
     all_texts = sampled_data['TEXT'].tolist()
 
+    # Run iterative training
     iterative_training(all_texts, max_iterations=4)
 
 

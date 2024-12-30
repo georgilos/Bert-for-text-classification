@@ -38,11 +38,11 @@ def generate_embeddings(texts, tokenizer, model, batch_size=16, use_cls=True):
 def main():
 
     # Load unlabeled data
-    unlabeled_data = pd.read_csv('unlabeled_data/cleaned_texts_unlabeled.csv', header=None)
+    unlabeled_data = pd.read_csv('unlabeled_data/cleaned_texts_unlabeled.csv', header=None, encoding='utf-8')
     # Because the .csv file has no headers, we must assign them
     unlabeled_data.columns = ['ID', 'TEXT']
     # Randomly select 100 rows
-    sampled_data = unlabeled_data.sample(n=500, random_state=11)  # Set random_state for reproducibility
+    sampled_data = unlabeled_data.sample(n=100, random_state=67)  # Set number of samples & random_state for reproducibility
 
     # Initialize tokenizer and model
     tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
@@ -77,14 +77,15 @@ def main():
     torch.save(sampled_embeddings, "sampled_embeddings.pt")
     print("Sampled embeddings saved as 'sampled_embeddings.pt'")
     # Save sampled_data to a CSV
-    sampled_data.to_csv("sampled_data.csv", index=False)
+
+    sampled_data.to_csv("sampled_data.csv", index=False, encoding='utf-8-sig')
     print("Sampled data saved as 'sampled_data.csv'")
 
     # Print statements
     # Amount of sampled data
     print(f"Created embeddings for {len(sampled_data)} lines")
     # First 5 instances of sampled data
-    print(sampled_data.head())
+    print(sampled_data.head(15))
     # The shape of the embeddings [#, 768]
     print("Sampled Embeddings Shape:", sampled_embeddings.shape)
     # The shape of the embeddings [#, #]
