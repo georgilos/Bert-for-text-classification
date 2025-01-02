@@ -75,6 +75,10 @@ def annotate_and_update_constraints(
     - must_link_pairs: Updated must-link pairs.
     - cannot_link_pairs: Updated cannot-link pairs.
     """
+    # Track newly created constraints
+    new_must_link_count = 0
+    new_cannot_link_count = 0
+
     print("Annotating Uncertain Positive Pairs (Within Clusters):")
     for i, j, dist in uncertain_positive_pairs:
         print(f"\nPair: ({i}, {j}), Distance: {dist:.4f}")
@@ -84,9 +88,11 @@ def annotate_and_update_constraints(
             decision = input("Should these belong in the same cluster? (y/n): ").strip().lower()
             if decision == "y":
                 must_link_pairs.append((i, j))
+                new_must_link_count += 1
                 break
             elif decision == "n":
                 cannot_link_pairs.append((i, j))
+                new_cannot_link_count += 1
                 break
             else:
                 print("Invalid input. Please enter 'y' or 'n'.")
@@ -100,15 +106,21 @@ def annotate_and_update_constraints(
             decision = input("Should these belong in different clusters? (y/n): ").strip().lower()
             if decision == "y":
                 cannot_link_pairs.append((i, j))
+                new_cannot_link_count += 1
                 break
             elif decision == "n":
                 must_link_pairs.append((i, j))
+                new_must_link_count += 1
                 break
             else:
                 print("Invalid input. Please enter 'y' or 'n'.")
 
-    return must_link_pairs, cannot_link_pairs
+    # Display constraint updates
+    print(f"\nCreated {new_must_link_count} must link constraints in this iteration.")
+    print(f"Created {new_cannot_link_count} cannot link constraints in this iteration.")
+    print(f"Total: {len(must_link_pairs)} must link constraints and {len(cannot_link_pairs)} cannot link constraints.")
 
+    return must_link_pairs, cannot_link_pairs
 
 
 def main():

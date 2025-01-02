@@ -3,6 +3,13 @@
   <component name="CsvFileAttributes">
     <option name="attributeMap">
       <map>
+        <entry key="\data\unlabeled_data\cleaned_texts_unlabeled.csv">
+          <value>
+            <Attribute>
+              <option name="separator" value="," />
+            </Attribute>
+          </value>
+        </entry>
         <entry key="\evaluation_data\not_related.csv">
           <value>
             <Attribute>
@@ -17,13 +24,6 @@
             </Attribute>
           </value>
         </entry>
-        <entry key="\sampled_data.csv">
-          <value>
-            <Attribute>
-              <option name="separator" value="," />
-            </Attribute>
-          </value>
-        </entry>
         <entry key="\training_data\not_related.csv">
           <value>
             <Attribute>
@@ -32,13 +32,6 @@
           </value>
         </entry>
         <entry key="\training_data\related.csv">
-          <value>
-            <Attribute>
-              <option name="separator" value="," />
-            </Attribute>
-          </value>
-        </entry>
-        <entry key="\unlabeled_data\cleaned_texts_unlabeled.csv">
           <value>
             <Attribute>
               <option name="separator" value="," />
