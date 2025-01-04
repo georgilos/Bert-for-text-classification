@@ -234,8 +234,8 @@ def main():
         exit()
 
     # Initialing empty ML & CL lists
-    must_link_pairs = []
-    cannot_link_pairs = []
+    must_link_pairs = []  # np.load("must_link_pairs.npy", allow_pickle=True).tolist()
+    cannot_link_pairs = []  # np.load("cannot_link_pairs.npy", allow_pickle=True).tolist()
 
     # Apply constrained DBSCAN
     adjusted_labels, cannot_link_dict = constrained_dbscan_with_constraints(
@@ -248,10 +248,10 @@ def main():
     noise_points = [i for i, label in enumerate(adjusted_labels) if label == -1]
 
     # Reduce distance matrix to 2D for visualization
-    # reduced_embeddings = PCA(n_components=2).fit_transform(distance_matrix)
+    reduced_embeddings = PCA(n_components=2).fit_transform(distance_matrix)
 
     # Reduce distance matrix to 2D for visualization using t-SNE
-    reduced_embeddings = TSNE(n_components=2, random_state=42).fit_transform(distance_matrix)
+    # reduced_embeddings = TSNE(n_components=2, random_state=42).fit_transform(distance_matrix)
 
     # Reduce distance matrix to 2D for visualization using UMAP
     # reducer = umap.UMAP(n_components=2, random_state=42)

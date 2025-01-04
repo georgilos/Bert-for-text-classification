@@ -42,7 +42,7 @@ def main():
     # Because the .csv file has no headers, we must assign them
     unlabeled_data.columns = ['ID', 'TEXT']
     # Randomly select 100 rows
-    sampled_data = unlabeled_data.sample(n=200, random_state=46) # Set number of samples & random_state for reproducibility
+    sampled_data = unlabeled_data.sample(n=100, random_state=21)  # Number of samples & random_state
 
     # Initialize tokenizer and model
     tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
