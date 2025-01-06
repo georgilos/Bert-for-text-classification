@@ -54,7 +54,7 @@ def constrained_dbscan_with_constraints(distance_matrix, eps, min_samples, must_
                 continue  # Skip this point
             is_valid = True
             for other_point in cluster_points:
-                if current_point in cannot_link_dict[other_point]:  # If the currect point being considered for addition to the cluster violates a cannot-link constraint
+                if current_point in cannot_link_dict[other_point]:  # If the correct point being considered for addition to the cluster violates a cannot-link constraint
                     is_valid = False
                     break  # Stop checking if violation is found
 
@@ -92,7 +92,7 @@ def constrained_dbscan_with_constraints(distance_matrix, eps, min_samples, must_
         # Assign the cluster ID to all points in the cluster
         for p in cluster_points:
             labels[p] = cluster_id
-
+    # Iterate over points
     for i in range(n):
         if visited[i] or labels[i] != -1:  # Skip visited or already clustered points
             continue
@@ -104,7 +104,7 @@ def constrained_dbscan_with_constraints(distance_matrix, eps, min_samples, must_
 
         # Expand the cluster
         expand_cluster(i)
-        cluster_id += 1 # Any new points that initiated the expand_clusters func, couldnt have belonged to a previos clsuters
+        cluster_id += 1  # Increment cluster ID for the next cluster
 
     return labels, cannot_link_dict
 
