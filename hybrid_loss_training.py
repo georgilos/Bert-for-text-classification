@@ -47,7 +47,7 @@ def calculate_support_pair_loss(embeddings, must_link_pairs, cannot_link_pairs, 
     embeddings = F.normalize(embeddings, p=2, dim=1)
 
     # Precompute pairwise distances
-    pairwise_distances = torch.cdist(embeddings, embeddings, p=2)
+    pairwise_distances = 1 - torch.matmul(embeddings, embeddings.T)
 
     triplet_losses = []
 

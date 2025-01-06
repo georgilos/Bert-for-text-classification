@@ -11,7 +11,7 @@ from data_embeddings_distance_mat import generate_embeddings
 from hybrid_loss_training import calculate_contrastive_loss, calculate_support_pair_loss
 
 
-def iterative_training(all_texts, max_iterations=4, margin=1.0, temperature=0.5, lambda_t=1.0):
+def iterative_training(all_texts, max_iterations=4, margin=1.0, temperature=0.5, lambda_t=1.0, batch_size=16):
     """
     Perform iterative training with dynamic eps and min_samples selection.
     """
@@ -66,7 +66,7 @@ def iterative_training(all_texts, max_iterations=4, margin=1.0, temperature=0.5,
 
     # Iterative process
     for iteration in range(max_iterations):
-        print(f"\nIteration {iteration + 1}:")
+        print(f"\nIteration {iteration}:")
 
         # Step 2: Select Uncertain Pairs and Annotate
         uncertain_positive_pairs, uncertain_negative_pairs = select_uncertain_pairs(distance_matrix, adjusted_labels)
@@ -77,45 +77,63 @@ def iterative_training(all_texts, max_iterations=4, margin=1.0, temperature=0.5,
         # Step 3: Fine-Tune Model
         print("Fine-tuning model...")
         optimizer = torch.optim.Adam(model.parameters(), lr=5e-5)
-        for i in range(0, len(all_texts), 32):  # Batch size = 32
-            batch_texts = all_texts[i:i + 32]
-            batch_indices = list(range(i, min(i + 32, len(all_texts))))
-            batch_index_set = set(batch_indices)
 
-            # Tokenize and generate embeddings
-            inputs = tokenizer(batch_texts, padding=True, truncation=True, return_tensors="pt", max_length=128)
-            inputs = {key: val.to(device) for key, val in inputs.items()}
-            outputs = model(**inputs)
-            embeddings = outputs.last_hidden_state[:, 0, :]  # [CLS] token embeddings
+        # Adding epochs
+        num_epochs = 3  # Define the number of epochs per iteration
+        for epoch in range(num_epochs):  # Start epoch loop
+            print(f"Epoch {epoch + 1}/{num_epochs}")
+            for i in range(0, len(all_texts), batch_size):  # Batch size = 32
+                batch_texts = all_texts[i:i + batch_size]
+                batch_indices = list(range(i, min(i + batch_size, len(all_texts))))
+                batch_index_set = set(batch_indices)
 
-            # Filter must-link and cannot-link pairs
-            batch_must_link_pairs = [(a, b) for (a, b) in must_link_pairs if
-                                     a in batch_index_set and b in batch_index_set]
-            batch_cannot_link_pairs = [(a, b) for (a, b) in cannot_link_pairs if
-                                       a in batch_index_set and b in batch_index_set]
+                # Tokenize and generate embeddings
+                inputs = tokenizer(batch_texts, padding=True, truncation=True, return_tensors="pt", max_length=128)
+                inputs = {key: val.to(device) for key, val in inputs.items()}
+                outputs = model(**inputs)
+                embeddings = outputs.last_hidden_state[:, 0, :]  # [CLS] token embeddings
 
-            # Create a mapping from global to batch-local indices
-            index_map = {global_idx: local_idx for local_idx, global_idx in enumerate(batch_indices)}
+                # Filter must-link and cannot-link pairs
+                batch_must_link_pairs = [(a, b) for (a, b) in must_link_pairs if
+                                         a in batch_index_set and b in batch_index_set]
+                batch_cannot_link_pairs = [(a, b) for (a, b) in cannot_link_pairs if
+                                           a in batch_index_set and b in batch_index_set]
 
-            # Convert global indices in pairs to batch-local indices
-            batch_must_link_pairs = [
-                (index_map[a], index_map[b]) for (a, b) in batch_must_link_pairs
-            ]
-            batch_cannot_link_pairs = [
-                (index_map[a], index_map[b]) for (a, b) in batch_cannot_link_pairs
-            ]
+                # Create a mapping from global to batch-local indices
+                index_map = {global_idx: local_idx for local_idx, global_idx in enumerate(batch_indices)}
 
-            # Compute hybrid loss
-            contrastive_loss = calculate_contrastive_loss(memory_bank, embeddings,
-                                                          torch.tensor(adjusted_labels)[batch_indices], temperature)
-            support_pair_loss = calculate_support_pair_loss(embeddings, batch_must_link_pairs, batch_cannot_link_pairs,
-                                                            margin)
-            combined_loss = contrastive_loss + lambda_t * support_pair_loss
+                # Convert global indices in pairs to batch-local indices
+                batch_must_link_pairs = [
+                    (index_map[a], index_map[b]) for (a, b) in batch_must_link_pairs
+                ]
+                batch_cannot_link_pairs = [
+                    (index_map[a], index_map[b]) for (a, b) in batch_cannot_link_pairs
+                ]
 
-            # Update model
-            optimizer.zero_grad()
-            combined_loss.backward()
-            optimizer.step()
+                # Compute hybrid loss
+                contrastive_loss = calculate_contrastive_loss(memory_bank, embeddings,
+                                                              torch.tensor(adjusted_labels)[batch_indices], temperature)
+                support_pair_loss = calculate_support_pair_loss(embeddings, batch_must_link_pairs,
+                                                                batch_cannot_link_pairs,
+                                                                margin)
+                combined_loss = contrastive_loss + lambda_t * support_pair_loss
+
+                # Log the losses for monitoring
+                print(f"Iteration {iteration}, Epoch {epoch + 1}, Batch {i // 32 + 1}: "
+                      f"Contrastive Loss = {contrastive_loss.item():.4f}, "
+                      f"Support Pair Loss = {support_pair_loss.item():.4f}, "
+                      f"Combined Loss = {combined_loss.item():.4f}")
+                print(f"Batch {i // batch_size + 1}: {batch_indices}")
+
+                print(f"Batch Must-Link Pairs: {batch_must_link_pairs}")
+                print(f"Batch Cannot-Link Pairs: {batch_cannot_link_pairs}")
+
+
+
+                # Update model
+                optimizer.zero_grad()
+                combined_loss.backward()
+                optimizer.step()
 
         # Step 4: Recompute Embeddings, Clusters, and Memory Bank
         print("Recomputing embeddings and clustering...")
@@ -209,7 +227,7 @@ def main():
     all_texts = sampled_data['TEXT'].tolist()
 
     # Run iterative training
-    iterative_training(all_texts, max_iterations=4)
+    iterative_training(all_texts, max_iterations=4,batch_size=16)
 
 
 if __name__ == "__main__":
