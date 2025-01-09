@@ -36,50 +36,8 @@ def calculate_contrastive_loss(memory_bank, embeddings, cluster_labels, temperat
     criterion = torch.nn.CrossEntropyLoss()
     loss = criterion(logits, labels)
 
+
     return loss
-
-
-def calculate_support_pair_loss(embeddings, must_link_pairs, cannot_link_pairs, margin=1.0):
-    """
-    Calculate the Support Pair Constraints Loss (L_t) based on must-link and cannot-link constraints.
-    """
-    # Normalize embeddings
-    embeddings = F.normalize(embeddings, p=2, dim=1)
-
-    # Precompute pairwise distances
-    pairwise_distances = 1 - torch.matmul(embeddings, embeddings.T)
-
-    triplet_losses = []
-
-    for anchor_idx in range(embeddings.size(0)):
-        positives = [j for (a, j) in must_link_pairs if a == anchor_idx] + \
-                    [a for (a, j) in must_link_pairs if j == anchor_idx]
-        negatives = [j for (a, j) in cannot_link_pairs if a == anchor_idx] + \
-                    [a for (a, j) in cannot_link_pairs if j == anchor_idx]
-
-        if not positives or not negatives:
-            continue
-
-        # Find the hardest positive and hardest negative
-        hardest_positive_idx = torch.argmax(torch.tensor([pairwise_distances[anchor_idx, p] for p in positives]))
-        hardest_positive = positives[hardest_positive_idx]
-
-        hardest_negative_idx = torch.argmin(torch.tensor([pairwise_distances[anchor_idx, n] for n in negatives]))
-        hardest_negative = negatives[hardest_negative_idx]
-
-        # Compute triplet loss
-        positive_distance = pairwise_distances[anchor_idx, hardest_positive]
-        negative_distance = pairwise_distances[anchor_idx, hardest_negative]
-        triplet_loss = F.relu(positive_distance - negative_distance + margin)
-        triplet_losses.append(triplet_loss)
-
-    # Average triplet losses
-    if triplet_losses:
-        support_pair_loss = torch.stack(triplet_losses).mean()
-    else:
-        support_pair_loss = torch.tensor(0.0, requires_grad=True)
-
-    return support_pair_loss
 
 
 def train_model(memory_bank, adjusted_labels, must_link_pairs, cannot_link_pairs, all_texts):

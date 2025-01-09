@@ -8,7 +8,246 @@ from scipy.spatial.distance import cdist
 from constrained_clustering import constrained_dbscan_with_constraints, merge_small_clusters, initialize_memory_bank
 from uncertain_pairs import select_uncertain_pairs, annotate_and_update_constraints
 from data_embeddings_distance_mat import generate_embeddings
-from hybrid_loss_training import calculate_contrastive_loss, calculate_support_pair_loss
+# from hybrid_loss_training import calculate_contrastive_loss, calculate_support_pair_loss
+import torch.nn.functional as F
+from sklearn.neighbors import NearestNeighbors
+import matplotlib.pyplot as plt
+# import os
+
+
+def save_k_distance_plot(embeddings, k=5, save_path="images/elbow_plot.png"):
+    os.makedirs(os.path.dirname(save_path), exist_ok=True)  # Ensure the directory exists
+    neighbors = NearestNeighbors(n_neighbors=k, metric='cosine')
+    neighbors_fit = neighbors.fit(embeddings)
+    distances, _ = neighbors_fit.kneighbors(embeddings)
+    distances = np.sort(distances[:, k - 1], axis=0)
+
+    plt.figure(figsize=(8, 6))
+    plt.plot(distances)
+    plt.xlabel('Points sorted by distance')
+    plt.ylabel(f'{k}th Nearest Neighbor Distance')
+    plt.title('k-Distance Graph')
+    plt.savefig(save_path)
+    print(f"Elbow plot saved at: {save_path}")
+    plt.close()  # Free resources
+    return distances
+
+
+def calculate_contrastive_loss(memory_bank, embeddings, cluster_labels, temperature=0.5):
+    """
+    Calculate the contrastive loss (L_c) based on instance-to-centroid contrastive loss.
+    """
+    # Filter out noise points (cluster label == -1)
+    valid_indices = cluster_labels != -1
+    valid_embeddings = embeddings[valid_indices]
+    valid_embeddings = F.normalize(valid_embeddings, p=2, dim=1)
+    valid_labels = cluster_labels[valid_indices]
+
+    # Prepare the centroids for all valid points
+    centroids = torch.stack([memory_bank[int(label.item())] for label in valid_labels])
+    centroids = F.normalize(centroids, p=2, dim=1)
+
+    # Calculate logits: instance-to-centroid similarity
+    batch_size = 8
+    logits = []
+    for i in range(0, len(valid_embeddings), batch_size):
+        batch_embeddings = valid_embeddings[i:i + batch_size]
+        batch_logits = torch.mm(batch_embeddings, centroids.T) / temperature
+        logits.append(batch_logits)
+    logits = torch.cat(logits, dim=0)
+
+    # Create the labels for the contrastive loss
+    labels = torch.arange(len(valid_embeddings)).to(logits.device)
+
+    # Calculate contrastive loss using CrossEntropyLoss
+    criterion = torch.nn.CrossEntropyLoss()
+    loss = criterion(logits, labels)
+
+
+    return loss
+
+def calculate_support_pair_loss(embeddings, must_link_pairs, cannot_link_pairs, distance_matrix, batch_indices, margin=1.0, debug=False):
+    """
+    Calculate the Support Pair Constraints Loss (L_t) based on must-link and cannot-link constraints.
+    """
+    # Normalize embeddings
+    embeddings = F.normalize(embeddings, p=2, dim=1)
+
+    # Precompute pairwise distances
+    pairwise_distances = torch.tensor(distance_matrix, device=embeddings.device)
+
+    triplet_losses = []
+
+    # Identifying Positive and Negative Instances
+    for anchor_idx in range(embeddings.size(0)):
+        positives = [j for (a, j) in must_link_pairs if a == anchor_idx] + \
+                    [a for (a, j) in must_link_pairs if j == anchor_idx]
+        negatives = [j for (a, j) in cannot_link_pairs if a == anchor_idx] + \
+                    [a for (a, j) in cannot_link_pairs if j == anchor_idx]
+
+        if not positives or not negatives:
+            continue
+        """""
+        # Find the hardest positive and hardest negative
+        hardest_positive_idx = torch.argmax(torch.tensor([pairwise_distances[anchor_idx, p] for p in positives]))
+        hardest_positive = positives[hardest_positive_idx]
+        """""
+
+        # Compute distances for must-link pairs
+        #positive_distances = [pairwise_distances[anchor_idx, p] for p in positives]
+        # Use global distance matrix for must-link pairs
+        positive_distances = [distance_matrix[batch_indices[anchor_idx], batch_indices[p]] for p in positives]
+
+        # Debug: Print all positive distances
+        print(f"Anchor is located in the index: {anchor_idx}, Must-Link Distances: {positive_distances}")
+
+        # Select the hardest positive (largest distance)
+        hardest_positive_idx = torch.argmax(torch.tensor(positive_distances))
+        hardest_positive = positives[hardest_positive_idx]
+
+        # Debug: Print the selected hardest positive and its distance
+        print(
+            f"Selected Hardest Positive Pair: ({anchor_idx}, {hardest_positive}), Distance: {positive_distances[hardest_positive_idx]:.4f}")
+
+        # Compute global distances for cannot-link pairs
+        anchor_global_idx = batch_indices[anchor_idx]
+        negative_distances = [distance_matrix[anchor_global_idx, batch_indices[n]] for n in negatives]
+
+        # Debug: Print all negative distances
+        print(f"Anchor is located in the index: {anchor_idx}, Cannot-Link Distances: {negative_distances}")
+
+        # Select the hardest negative (smallest global distance)
+        hardest_negative_idx = torch.argmin(torch.tensor(negative_distances))
+        hardest_negative = negatives[hardest_negative_idx]
+
+        # Debug: Print the selected hardest negative and its distance
+        print(
+            f"Selected Hardest Negative Pair: ({anchor_idx}, {hardest_negative}), Distance: {negative_distances[hardest_negative_idx]:.4f}")
+        hardest_positive_global_idx = batch_indices[hardest_positive]
+        hardest_negative_global_idx = batch_indices[hardest_negative]
+
+        # Compute triplet loss
+        # Replace batch-local distance computation with global distance lookup
+        positive_distance = torch.tensor(distance_matrix[anchor_global_idx, hardest_positive_global_idx],
+                                         device=embeddings.device)
+        negative_distance = torch.tensor(distance_matrix[anchor_global_idx, hardest_negative_global_idx],
+                                         device=embeddings.device)
+
+        triplet_loss = F.relu(positive_distance - negative_distance + margin)
+        triplet_losses.append(triplet_loss)
+
+        # Debug print
+        if debug:
+            print(f"The anchor of the current batch is in index {anchor_idx}, "
+                  f"Hardest Positive Pair: ({anchor_idx}, {hardest_positive}), "
+                  f"Positive Distance: {positive_distance.item():.4f}, "
+                  f"Hardest Negative Pair: ({anchor_idx}, {hardest_negative}), "
+                  f"Negative Distance: {negative_distance.item():.4f}"
+                  f" Triplet Loss: {triplet_loss.item():.4f}")
+
+    # Average triplet losses
+    if triplet_losses:
+        support_pair_loss = torch.stack(triplet_losses).mean()
+    else:
+        support_pair_loss = torch.tensor(0.0, requires_grad=True)
+
+    return support_pair_loss
+
+
+def assign_anchors_to_batches(all_texts, anchors, batch_size):
+    """
+    Create batches prioritizing anchors and their related instances.
+
+    Parameters:
+    - all_texts: List of all instances.
+    - anchors: Dictionary of anchors and their related instances.
+    - batch_size: Size of each batch.
+
+    Returns:
+    - batches: List of batches, where each batch is a list of indices.
+    """
+    all_indices = set(range(len(all_texts)))
+    batches = []
+
+    # Assign anchors and their related instances to batches
+    for anchor, related_instances in anchors.items():
+        batch = {anchor}.union(related_instances)
+        if len(batch) > batch_size:
+            raise ValueError("Anchor and related instances exceed batch size.")
+        batches.append(list(batch))
+        all_indices -= batch
+
+    # Fill remaining slots in each batch
+    for batch in batches:
+        remaining_slots = batch_size - len(batch)
+        if remaining_slots > 0:
+            additional_indices = list(all_indices)[:remaining_slots]
+            batch.extend(additional_indices)
+            all_indices -= set(additional_indices)
+
+    # Handle any remaining indices
+    while all_indices:
+        batch = list(all_indices)[:batch_size]
+        batches.append(batch)
+        all_indices -= set(batch)
+
+    return batches
+
+def debug_pair_distances(embeddings, must_link_pairs, cannot_link_pairs):
+    """
+    Print the distances of all must-link and cannot-link pairs.
+
+    Parameters:
+    - embeddings: Tensor containing the embeddings of all instances.
+    - must_link_pairs: List of must-link pairs (tuples of indices).
+    - cannot_link_pairs: List of cannot-link pairs (tuples of indices).
+    """
+    print("\nDistances of Must-Link and Cannot-Link Pairs:")
+    # Normalize embeddings for cosine similarity
+    normalized_embeddings = F.normalize(embeddings, p=2, dim=1)
+    for a, b in must_link_pairs:
+        distance = 1 - torch.dot(normalized_embeddings[a], normalized_embeddings[b]).item()
+        print(f"Distance of ML({a},{b}): {distance:.4f}")
+    for a, b in cannot_link_pairs:
+        distance = 1 - torch.dot(normalized_embeddings[a], normalized_embeddings[b]).item()
+        print(f"Distance of CL({a},{b}): {distance:.4f}")
+
+
+def find_anchors(must_link_pairs, cannot_link_pairs):
+    """
+    Identify anchors and their related instances.
+
+    Parameters:
+    - must_link_pairs: List of tuples representing must-link pairs.
+    - cannot_link_pairs: List of tuples representing cannot-link pairs.
+
+    Returns:
+    - Dictionary of anchors with related instances.
+    """
+    anchors = {}
+
+    # Collect relationships
+    for pair in must_link_pairs:
+        for instance in pair:
+            if instance not in anchors:
+                anchors[instance] = {'must_link': set(), 'cannot_link': set()}
+            anchors[instance]['must_link'].update(pair)
+
+    for pair in cannot_link_pairs:
+        for instance in pair:
+            if instance not in anchors:
+                anchors[instance] = {'must_link': set(), 'cannot_link': set()}
+            anchors[instance]['cannot_link'].update(pair)
+
+    # Filter true anchors
+    true_anchors = {}
+    for anchor, relations in anchors.items():
+        if relations['must_link'] and relations['cannot_link']:
+            related_instances = relations['must_link'].union(relations['cannot_link'])
+            related_instances.discard(anchor)
+            true_anchors[anchor] = related_instances
+
+    return true_anchors
 
 
 def iterative_training(all_texts, max_iterations=4, margin=1.0, temperature=0.5, lambda_t=1.0, batch_size=16):
@@ -26,6 +265,9 @@ def iterative_training(all_texts, max_iterations=4, margin=1.0, temperature=0.5,
     print("Generating initial embeddings...")
     sampled_embeddings = generate_embeddings(all_texts, tokenizer, model, batch_size=16, use_cls=True)
     distance_matrix = cdist(sampled_embeddings.cpu().numpy(), sampled_embeddings.cpu().numpy(), metric='cosine')
+
+    # Save the elbow plot for initial embeddings
+    save_k_distance_plot(sampled_embeddings.cpu().numpy(), k=5, save_path="images/initial_elbow_plot.png")
 
     # Calculate and display mean pairwise distance
     mean_distance = np.mean(distance_matrix)
@@ -62,7 +304,7 @@ def iterative_training(all_texts, max_iterations=4, margin=1.0, temperature=0.5,
     memory_bank = initialize_memory_bank(sampled_embeddings, torch.tensor(adjusted_labels, dtype=torch.int64))
 
     # Initialize constraints
-    must_link_pairs, cannot_link_pairs = [], []
+    must_link_pairs, cannot_link_pairs = [(0, 1), (2, 3), (0, 2)], [(1, 14), (1,30), (2, 17)]
 
     # Iterative process
     for iteration in range(max_iterations):
@@ -74,17 +316,32 @@ def iterative_training(all_texts, max_iterations=4, margin=1.0, temperature=0.5,
             uncertain_positive_pairs, uncertain_negative_pairs, all_texts, must_link_pairs, cannot_link_pairs
         )
 
+        # Call the function to find anchors
+        anchors = find_anchors(must_link_pairs, cannot_link_pairs)
+
+        # Print results
+        if anchors:
+            print("Anchors found:")
+            for anchor, related_instances in anchors.items():
+                print(f"Anchor: {anchor}, Related Instances: {list(related_instances)}")
+        else:
+            print("No anchors found.")  #########
+
+        # Call the debug_pair_distances function
+        debug_pair_distances(sampled_embeddings, must_link_pairs, cannot_link_pairs)
+
         # Step 3: Fine-Tune Model
         print("Fine-tuning model...")
         optimizer = torch.optim.Adam(model.parameters(), lr=5e-5)
+
+        batches = assign_anchors_to_batches(all_texts, anchors, batch_size)
 
         # Adding epochs
         num_epochs = 3  # Define the number of epochs per iteration
         for epoch in range(num_epochs):  # Start epoch loop
             print(f"Epoch {epoch + 1}/{num_epochs}")
-            for i in range(0, len(all_texts), batch_size):  # Batch size = 32
-                batch_texts = all_texts[i:i + batch_size]
-                batch_indices = list(range(i, min(i + batch_size, len(all_texts))))
+            for batch_indices in batches:  # Use the precomputed batches
+                batch_texts = [all_texts[idx] for idx in batch_indices]
                 batch_index_set = set(batch_indices)
 
                 # Tokenize and generate embeddings
@@ -93,7 +350,7 @@ def iterative_training(all_texts, max_iterations=4, margin=1.0, temperature=0.5,
                 outputs = model(**inputs)
                 embeddings = outputs.last_hidden_state[:, 0, :]  # [CLS] token embeddings
 
-                # Filter must-link and cannot-link pairs
+                # Filter must-link and cannot-link pairs whose instances are in the batch
                 batch_must_link_pairs = [(a, b) for (a, b) in must_link_pairs if
                                          a in batch_index_set and b in batch_index_set]
                 batch_cannot_link_pairs = [(a, b) for (a, b) in cannot_link_pairs if
@@ -113,32 +370,54 @@ def iterative_training(all_texts, max_iterations=4, margin=1.0, temperature=0.5,
                 # Compute hybrid loss
                 contrastive_loss = calculate_contrastive_loss(memory_bank, embeddings,
                                                               torch.tensor(adjusted_labels)[batch_indices], temperature)
+
+                # Log global distances for all batch pairs
+                print("Global Distances for Batch:")
+                for a, b in batch_must_link_pairs + batch_cannot_link_pairs:
+                    global_a, global_b = batch_indices[a], batch_indices[b]
+                    print(f"Global Pair ({global_a}, {global_b}), Distance: {distance_matrix[global_a, global_b]:.4f}")
+
                 support_pair_loss = calculate_support_pair_loss(embeddings, batch_must_link_pairs,
                                                                 batch_cannot_link_pairs,
-                                                                margin)
+                                                                distance_matrix,
+                                                                batch_indices,
+                                                                margin,
+                                                                debug=True)
                 combined_loss = contrastive_loss + lambda_t * support_pair_loss
 
                 # Log the losses for monitoring
-                print(f"Iteration {iteration}, Epoch {epoch + 1}, Batch {i // 32 + 1}: "
+                print(f"Iteration {iteration}, Epoch {epoch + 1}, Batch {batches.index(batch_indices) + 1}: "
                       f"Contrastive Loss = {contrastive_loss.item():.4f}, "
                       f"Support Pair Loss = {support_pair_loss.item():.4f}, "
                       f"Combined Loss = {combined_loss.item():.4f}")
-                print(f"Batch {i // batch_size + 1}: {batch_indices}")
+                print(f"Batch {batches.index(batch_indices) + 1}: {batch_indices}")
+                print(f"Must-Link Pairs with Batch Local indexes: {batch_must_link_pairs}")
+                print(f"Cannot-Link Pairs with Batch Local indexes: {batch_cannot_link_pairs}")
 
-                print(f"Batch Must-Link Pairs: {batch_must_link_pairs}")
-                print(f"Batch Cannot-Link Pairs: {batch_cannot_link_pairs}")
-
-
+                print("------------NEXT BATCH------------")
 
                 # Update model
                 optimizer.zero_grad()
                 combined_loss.backward()
                 optimizer.step()
 
+
+            # Recompute global embeddings and distance matrix after each epoch
+            print("Recomputing global embeddings and distance matrix...")
+            updated_embeddings = generate_embeddings(all_texts, tokenizer, model, batch_size=16, use_cls=True)
+
+            distance_matrix = cdist(updated_embeddings.cpu().numpy(), updated_embeddings.cpu().numpy(),
+                                    metric='cosine')
+
+
         # Step 4: Recompute Embeddings, Clusters, and Memory Bank
         print("Recomputing embeddings and clustering...")
         updated_embeddings = generate_embeddings(all_texts, tokenizer, model, batch_size=16, use_cls=True)
         distance_matrix = cdist(updated_embeddings.cpu().numpy(), updated_embeddings.cpu().numpy(), metric='cosine')
+
+        # Save the elbow plot for updated embeddings
+        save_k_distance_plot(updated_embeddings.cpu().numpy(), k=5,
+                             save_path=f"images/elbow_plot_iteration_{iteration + 1}.png")
 
         # Calculate and display mean pairwise distance
         mean_distance = np.mean(distance_matrix)
@@ -223,11 +502,11 @@ def main():
     sampled_data = sampled_data[sampled_data['TEXT'].str.strip() != '']
 
     # Sample and prepare the data
-    sampled_data = sampled_data.sample(n=300, random_state=55)  # Randomly sample 100 rows
+    sampled_data = sampled_data.sample(n=100, random_state=75)  # Randomly sample 100 rows
     all_texts = sampled_data['TEXT'].tolist()
 
     # Run iterative training
-    iterative_training(all_texts, max_iterations=4,batch_size=16)
+    iterative_training(all_texts, max_iterations=4, batch_size=16)
 
 
 if __name__ == "__main__":
