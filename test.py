@@ -5,7 +5,7 @@ import pandas as pd
 from transformers import BertTokenizer, BertModel
 from collections import Counter
 from scipy.spatial.distance import cdist
-from constrained_clustering import constrained_dbscan_with_constraints, merge_small_clusters, initialize_memory_bank
+from constrained_clustering import constrained_dbscan_with_constraints, merge_small_clusters, compute_cluster_centroids
 from uncertain_pairs import select_uncertain_pairs, annotate_and_update_constraints
 from data_embeddings_distance_mat import generate_embeddings
 # from hybrid_loss_training import calculate_contrastive_loss, calculate_support_pair_loss
@@ -33,7 +33,7 @@ def save_k_distance_plot(embeddings, k=5, save_path="images/elbow_plot.png"):
     return distances
 
 
-def calculate_contrastive_loss(memory_bank, embeddings, cluster_labels, temperature=0.5):
+def calculate_contrastive_loss(centroids, embeddings, cluster_labels, temperature=0.5):
     """
     Calculate the contrastive loss (L_c) based on instance-to-centroid contrastive loss.
     """
@@ -44,7 +44,7 @@ def calculate_contrastive_loss(memory_bank, embeddings, cluster_labels, temperat
     valid_labels = cluster_labels[valid_indices]
 
     # Prepare the centroids for all valid points
-    centroids = torch.stack([memory_bank[int(label.item())] for label in valid_labels])
+    centroids = torch.stack([centroids[int(label.item())] for label in valid_labels])
     centroids = F.normalize(centroids, p=2, dim=1)
 
     # Calculate logits: instance-to-centroid similarity
@@ -63,8 +63,8 @@ def calculate_contrastive_loss(memory_bank, embeddings, cluster_labels, temperat
     criterion = torch.nn.CrossEntropyLoss()
     loss = criterion(logits, labels)
 
-
     return loss
+
 
 def calculate_support_pair_loss(embeddings, must_link_pairs, cannot_link_pairs, distance_matrix, batch_indices, margin=1.0, debug=False):
     """
@@ -74,7 +74,7 @@ def calculate_support_pair_loss(embeddings, must_link_pairs, cannot_link_pairs, 
     embeddings = F.normalize(embeddings, p=2, dim=1)
 
     # Precompute pairwise distances
-    pairwise_distances = torch.tensor(distance_matrix, device=embeddings.device)
+    # pairwise_distances = torch.tensor(distance_matrix, device=embeddings.device)
 
     triplet_losses = []
 
@@ -94,7 +94,7 @@ def calculate_support_pair_loss(embeddings, must_link_pairs, cannot_link_pairs, 
         """""
 
         # Compute distances for must-link pairs
-        #positive_distances = [pairwise_distances[anchor_idx, p] for p in positives]
+        # positive_distances = [pairwise_distances[anchor_idx, p] for p in positives]
         # Use global distance matrix for must-link pairs
         positive_distances = [distance_matrix[batch_indices[anchor_idx], batch_indices[p]] for p in positives]
 
@@ -192,6 +192,7 @@ def assign_anchors_to_batches(all_texts, anchors, batch_size):
         all_indices -= set(batch)
 
     return batches
+
 
 def debug_pair_distances(embeddings, must_link_pairs, cannot_link_pairs):
     """
@@ -300,8 +301,8 @@ def iterative_training(all_texts, max_iterations=4, margin=1.0, temperature=0.5,
         else:
             print("Reclustering with different parameters...")
 
-    # Initialize memory bank
-    memory_bank = initialize_memory_bank(sampled_embeddings, torch.tensor(adjusted_labels, dtype=torch.int64))
+    # Compute centroids
+    centroids = compute_cluster_centroids(sampled_embeddings, torch.tensor(adjusted_labels, dtype=torch.int64))
 
     # Initialize constraints
     must_link_pairs, cannot_link_pairs = [(0, 1), (2, 3), (0, 2)], [(1, 14), (1,30), (2, 17)]
@@ -338,6 +339,7 @@ def iterative_training(all_texts, max_iterations=4, margin=1.0, temperature=0.5,
 
         # Adding epochs
         num_epochs = 3  # Define the number of epochs per iteration
+        alpha = 0.25  # Momentum coefficient for memory bank updates
         for epoch in range(num_epochs):  # Start epoch loop
             print(f"Epoch {epoch + 1}/{num_epochs}")
             for batch_indices in batches:  # Use the precomputed batches
@@ -345,10 +347,18 @@ def iterative_training(all_texts, max_iterations=4, margin=1.0, temperature=0.5,
                 batch_index_set = set(batch_indices)
 
                 # Tokenize and generate embeddings
-                inputs = tokenizer(batch_texts, padding=True, truncation=True, return_tensors="pt", max_length=128)
-                inputs = {key: val.to(device) for key, val in inputs.items()}
-                outputs = model(**inputs)
-                embeddings = outputs.last_hidden_state[:, 0, :]  # [CLS] token embeddings
+                # inputs = tokenizer(batch_texts, padding=True, truncation=True, return_tensors="pt", max_length=128)
+                # inputs = {key: val.to(device) for key, val in inputs.items()}
+                # outputs = model(**inputs)
+                # batch_embeddings = outputs.last_hidden_state[:, 0, :]  # [CLS] token embeddings
+
+                # TRY UNCOMMENTING THE FOLLOWING 2 LINES AND COMMENTING THE NEXT BATCH EMBEDDINGS
+
+                batch_embeddings = sampled_embeddings[batch_indices]
+                batch_embeddings.requires_grad = True
+
+                # Enable gradients locally for batch embeddings (THIS NEXT ONE TO COMMENT)
+                # batch_embeddings = sampled_embeddings[batch_indices].clone().detach().requires_grad_(True)
 
                 # Filter must-link and cannot-link pairs whose instances are in the batch
                 batch_must_link_pairs = [(a, b) for (a, b) in must_link_pairs if
@@ -368,7 +378,7 @@ def iterative_training(all_texts, max_iterations=4, margin=1.0, temperature=0.5,
                 ]
 
                 # Compute hybrid loss
-                contrastive_loss = calculate_contrastive_loss(memory_bank, embeddings,
+                contrastive_loss = calculate_contrastive_loss(centroids, batch_embeddings,
                                                               torch.tensor(adjusted_labels)[batch_indices], temperature)
 
                 # Log global distances for all batch pairs
@@ -377,7 +387,7 @@ def iterative_training(all_texts, max_iterations=4, margin=1.0, temperature=0.5,
                     global_a, global_b = batch_indices[a], batch_indices[b]
                     print(f"Global Pair ({global_a}, {global_b}), Distance: {distance_matrix[global_a, global_b]:.4f}")
 
-                support_pair_loss = calculate_support_pair_loss(embeddings, batch_must_link_pairs,
+                support_pair_loss = calculate_support_pair_loss(batch_embeddings, batch_must_link_pairs,
                                                                 batch_cannot_link_pairs,
                                                                 distance_matrix,
                                                                 batch_indices,
@@ -401,22 +411,27 @@ def iterative_training(all_texts, max_iterations=4, margin=1.0, temperature=0.5,
                 combined_loss.backward()
                 optimizer.step()
 
+                # Recompute embeddings for the batch using the updated model
+                with torch.no_grad():
+                    updated_inputs = tokenizer(batch_texts, padding=True, truncation=True, return_tensors="pt",
+                                               max_length=128)
+                    updated_inputs = {key: val.to(device) for key, val in updated_inputs.items()}
+                    updated_outputs = model(**updated_inputs)
+                    updated_batch_embeddings = updated_outputs.last_hidden_state[:, 0, :]
 
-            # Recompute global embeddings and distance matrix after each epoch
-            print("Recomputing global embeddings and distance matrix...")
-            updated_embeddings = generate_embeddings(all_texts, tokenizer, model, batch_size=16, use_cls=True)
-
-            distance_matrix = cdist(updated_embeddings.cpu().numpy(), updated_embeddings.cpu().numpy(),
-                                    metric='cosine')
-
+                # Update memory bank using momentum
+                for local_idx, global_idx in enumerate(batch_indices):
+                    sampled_embeddings[global_idx] = (
+                            alpha * sampled_embeddings[global_idx] + (1 - alpha) * updated_batch_embeddings[local_idx]
+                    )
 
         # Step 4: Recompute Embeddings, Clusters, and Memory Bank
         print("Recomputing embeddings and clustering...")
-        updated_embeddings = generate_embeddings(all_texts, tokenizer, model, batch_size=16, use_cls=True)
-        distance_matrix = cdist(updated_embeddings.cpu().numpy(), updated_embeddings.cpu().numpy(), metric='cosine')
+        # updated_embeddings = generate_embeddings(all_texts, tokenizer, model, batch_size=16, use_cls=True)
+        distance_matrix = cdist(sampled_embeddings.cpu().numpy(), sampled_embeddings.cpu().numpy(), metric='cosine')
 
         # Save the elbow plot for updated embeddings
-        save_k_distance_plot(updated_embeddings.cpu().numpy(), k=5,
+        save_k_distance_plot(sampled_embeddings.cpu().numpy(), k=5,
                              save_path=f"images/elbow_plot_iteration_{iteration + 1}.png")
 
         # Calculate and display mean pairwise distance
@@ -449,7 +464,7 @@ def iterative_training(all_texts, max_iterations=4, margin=1.0, temperature=0.5,
             else:
                 print("Reclustering with different parameters...")
 
-        memory_bank = initialize_memory_bank(updated_embeddings, torch.tensor(adjusted_labels, dtype=torch.int64))
+        centroids = compute_cluster_centroids(sampled_embeddings, torch.tensor(adjusted_labels, dtype=torch.int64))
 
     # View cluster summaries
     print("\nFinal Cluster Summaries:")
@@ -476,7 +491,7 @@ def iterative_training(all_texts, max_iterations=4, margin=1.0, temperature=0.5,
             cluster_labels[cluster_id] = label
 
     # Save cluster centroids and labels for inference
-    torch.save(memory_bank, "./models/final_memory_bank.pt")
+    torch.save(centroids, "./models/final_centroids.pt")
     # Convert numpy.int64 keys to int
     cluster_labels = {int(k): v for k, v in cluster_labels.items()}
     with open("./models/cluster_labels.json", "w") as f:

@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 
 
-def calculate_contrastive_loss(memory_bank, embeddings, cluster_labels, temperature=0.5):
+def calculate_contrastive_loss(centroids, embeddings, cluster_labels, temperature=0.5):
     """
     Calculate the contrastive loss (L_c) based on instance-to-centroid contrastive loss.
     """
@@ -17,7 +17,7 @@ def calculate_contrastive_loss(memory_bank, embeddings, cluster_labels, temperat
     valid_labels = cluster_labels[valid_indices]
 
     # Prepare the centroids for all valid points
-    centroids = torch.stack([memory_bank[int(label.item())] for label in valid_labels])
+    centroids = torch.stack([centroids[int(label.item())] for label in valid_labels])
     centroids = F.normalize(centroids, p=2, dim=1)
 
     # Calculate logits: instance-to-centroid similarity
@@ -39,11 +39,11 @@ def calculate_contrastive_loss(memory_bank, embeddings, cluster_labels, temperat
 
     return loss
 
-
+""""
 def train_model(memory_bank, adjusted_labels, must_link_pairs, cannot_link_pairs, all_texts):
-    """
-    Train the model using a hybrid loss function.
-    """
+    
+    # Train the model using a hybrid loss function.
+    
     # Initialize tokenizer and model
     tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
     model = BertModel.from_pretrained('bert-base-uncased')
@@ -140,3 +140,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+"""

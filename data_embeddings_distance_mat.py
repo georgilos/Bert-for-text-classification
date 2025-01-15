@@ -42,7 +42,7 @@ def main():
     # Because the .csv file has no headers, we must assign them
     unlabeled_data.columns = ['ID', 'TEXT']
     # Randomly select 100 rows
-    sampled_data = unlabeled_data.sample(n=300, random_state=21)  # Number of samples & random_state
+    sampled_data = unlabeled_data.sample(n=40, random_state=21)  # Number of samples & random_state
 
     # Initialize tokenizer and model
     tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
@@ -52,7 +52,7 @@ def main():
     sampled_texts = sampled_data['TEXT'].tolist()
     sampled_embeddings = generate_embeddings(sampled_texts, tokenizer, model, batch_size=16, use_cls=True)
 
-    # Convert embeddings to NumPy array and compute pairwise distance matrix using cosine distance
+    # Convert embeddings to NumPy array for the cdist() and compute pairwise distance matrix using cosine distance
     embeddings = sampled_embeddings.cpu().numpy()
     distance_matrix = cdist(embeddings, embeddings, metric='cosine')
 
