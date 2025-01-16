@@ -11,7 +11,7 @@ import torch.nn.functional as F
 import re
 
 
-def constrained_dbscan_with_constraints(distance_matrix, eps, must_link, cannot_link):
+def constrained_dbscan_with_constraints(distance_matrix, eps, min_samples, must_link, cannot_link):
     """
     Constrained DBSCAN implementation where constraints are applied during clustering.
 
@@ -101,12 +101,23 @@ def constrained_dbscan_with_constraints(distance_matrix, eps, must_link, cannot_
             # Points within a distance of 'eps' are considered neighbors.
             # np.where(...) returns indices of neighbors (using [0]).
             neighbors = np.where(distance_matrix[current_point] <= eps)[0]
-
-            # Ensure cannot-link constraints are not violated
+            valid_neighbors = []
             for neighbor in neighbors:
                 if neighbor not in cluster_points and not any(
                         neighbor in cannot_link_dict.get(p, set()) for p in cluster_points):
+                    valid_neighbors.append(neighbor)
+
+            # Check min_samples condition before adding neighbors
+            if len(valid_neighbors) >= min_samples:
+                for neighbor in valid_neighbors:
                     queue.append(neighbor)
+
+        if len(cluster_points) >= min_samples:
+            for p in cluster_points:
+                labels[p] = cluster_id
+        else:  # Treat as noise if the cluster is too small
+            for p in cluster_points:
+                labels[p] = -1
 
             # Add must-link neighbors to the cluster and queue
             # for p in must_link_dict[current_point]:
@@ -120,8 +131,8 @@ def constrained_dbscan_with_constraints(distance_matrix, eps, must_link, cannot_
             #             queue.append(neighbor)
 
         # Assign the cluster ID to all points in the cluster
-        for p in cluster_points:
-            labels[p] = cluster_id
+        # for p in cluster_points:
+        #     labels[p] = cluster_id
 
     # Constraint-based initialization
     # for i, j in must_link:
@@ -272,12 +283,12 @@ def main():
         exit()
 
     # Initialing empty ML & CL lists
-    must_link_pairs = []  # np.load("must_link_pairs.npy", allow_pickle=True).tolist()
-    cannot_link_pairs = []  # np.load("cannot_link_pairs.npy", allow_pickle=True).tolist()
+    must_link_pairs = [(0,1),(1,2),(2,3),(3,5),(4,6),(6,9)]  # np.load("must_link_pairs.npy", allow_pickle=True).tolist()
+    cannot_link_pairs = [(5,4)]  # np.load("cannot_link_pairs.npy", allow_pickle=True).tolist()
 
     # Apply constrained DBSCAN
     adjusted_labels, cannot_link_dict = constrained_dbscan_with_constraints(
-        distance_matrix, eps, must_link_pairs, cannot_link_pairs
+        distance_matrix, eps,min_samples, must_link_pairs, cannot_link_pairs
     )
 
     adjusted_labels = merge_small_clusters(distance_matrix, adjusted_labels, cannot_link_dict, min_samples)
