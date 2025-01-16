@@ -11,7 +11,7 @@ import torch.nn.functional as F
 import re
 
 
-def constrained_dbscan_with_constraints(distance_matrix, eps, min_samples, must_link, cannot_link):
+def constrained_dbscan_with_constraints(distance_matrix, eps, must_link, cannot_link):
     """
     Constrained DBSCAN implementation where constraints are applied during clustering.
 
@@ -30,15 +30,32 @@ def constrained_dbscan_with_constraints(distance_matrix, eps, min_samples, must_
     cluster_id = 0  # Start with cluster ID 0
 
     # Convert must-link and cannot-link constraints into dictionaries for quick lookup
-    must_link_dict = {i: set() for i in range(n)}
+    must_link_dict = {}
     for i, j in must_link:
-        must_link_dict[i].add(j)
-        must_link_dict[j].add(i)
+        # If i or j already exists in a group, merge the groups
+        group_i = must_link_dict.get(i)
+        group_j = must_link_dict.get(j)
+        if group_i and group_j:
+            if group_i != group_j:  # Merge only if they are different groups
+                group_i.update(group_j)
+                for k in group_j:
+                    must_link_dict[k] = group_i
+        elif group_i:
+            group_i.add(j)
+            must_link_dict[j] = group_i
+        elif group_j:
+            group_j.add(i)
+            must_link_dict[i] = group_j
+        else:
+            # Create a new group if neither i nor j exists in any group
+            new_group = {i, j}
+            must_link_dict[i] = new_group
+            must_link_dict[j] = new_group
 
-    cannot_link_dict = {i: set() for i in range(n)}
+    cannot_link_dict = {}
     for i, j in cannot_link:
-        cannot_link_dict[i].add(j)
-        cannot_link_dict[j].add(i)
+        cannot_link_dict.setdefault(i, set()).add(j)
+        cannot_link_dict.setdefault(j, set()).add(i)
 
     # Visit each point
     visited = np.full(n, False)  # Assigning all points as not visited
@@ -46,7 +63,7 @@ def constrained_dbscan_with_constraints(distance_matrix, eps, min_samples, must_
     def expand_cluster(point_idx):
         # Initialising a double-ended queue to store points for Breadth-First Search
         queue = deque([point_idx])  # Add the index of the initial point to it
-        cluster_points = []  # Points that will be part of this cluster
+        cluster_points = set()  # Points that will be part of this cluster
         # (BFS as long as there are points in the deque to be explored)
         while queue:
             current_point = queue.popleft()  # Retrieve and remove the leftmost element from the queue
@@ -54,13 +71,16 @@ def constrained_dbscan_with_constraints(distance_matrix, eps, min_samples, must_
                 continue  # Skip this point
 
             # Cannot link check
-            if any(current_point in cannot_link_dict[p] for p in cluster_points):
+            if any(current_point in cannot_link_dict.get(p, set()) for p in cluster_points):
                 continue  # Skip this point if it violates cannot-link with any point in the cluster
             # Prioritize must link neighbors
-            for neighbor in must_link_dict[current_point]:
-                if neighbor not in cluster_points and not any(neighbor in cannot_link_dict[p] for p in cluster_points):  # Add cannot-link check here
-                    cluster_points.append(neighbor)  # Add to cluster immediately
-                    queue.append(neighbor)  # Add to queue for further expansion
+            if current_point in must_link_dict:
+                group = must_link_dict[current_point]
+                for neighbor in group:
+                    if neighbor not in cluster_points and not any(
+                            neighbor in cannot_link_dict.get(p, set()) for p in cluster_points):
+                        cluster_points.add(neighbor)
+                        queue.append(neighbor)
 
             """"
             is_valid = True
@@ -75,7 +95,7 @@ def constrained_dbscan_with_constraints(distance_matrix, eps, min_samples, must_
                 continue  # Option 2: Skip this point and prevent further expansion
             """
             visited[current_point] = True  # When a point passes the constraint check, mark it as
-            cluster_points.append(current_point)  # Add point to the cluster_points list
+            cluster_points.add(current_point)  # Add point to the cluster_points list
 
             # Get neighbors of the current point based on pre-calculated distances in distance_matrix.
             # Points within a distance of 'eps' are considered neighbors.
@@ -83,11 +103,10 @@ def constrained_dbscan_with_constraints(distance_matrix, eps, min_samples, must_
             neighbors = np.where(distance_matrix[current_point] <= eps)[0]
 
             # Ensure cannot-link constraints are not violated
-            valid_neighbors = []
             for neighbor in neighbors:
-                # Check for direct cannot-link violations with all points in the cluster
-                if not any(neighbor in cannot_link_dict[other_point] for other_point in cluster_points) and neighbor not in cluster_points:
-                    valid_neighbors.append(neighbor)
+                if neighbor not in cluster_points and not any(
+                        neighbor in cannot_link_dict.get(p, set()) for p in cluster_points):
+                    queue.append(neighbor)
 
             # Add must-link neighbors to the cluster and queue
             # for p in must_link_dict[current_point]:
@@ -95,29 +114,29 @@ def constrained_dbscan_with_constraints(distance_matrix, eps, min_samples, must_
             #         queue.append(p)
 
             # If the current point has enough neighbors, include them in the cluster
-            if len(valid_neighbors) >= min_samples:
-                for neighbor in valid_neighbors:
-                    if neighbor not in cluster_points:
-                        queue.append(neighbor)
+            # if len(valid_neighbors) >= min_samples:
+            #     for neighbor in valid_neighbors:
+            #         if neighbor not in cluster_points:
+            #             queue.append(neighbor)
 
         # Assign the cluster ID to all points in the cluster
         for p in cluster_points:
             labels[p] = cluster_id
 
     # Constraint-based initialization
-    for i, j in must_link:
-        if labels[i] == -1 and labels[j] == -1:  # Both points are not yet clustered
-            expand_cluster(i)  # Start a new cluster with the must-link pair
-            cluster_id += 1
+    # for i, j in must_link:
+    #     if labels[i] == -1 and labels[j] == -1:  # Both points are not yet clustered
+    #         expand_cluster(i)  # Start a new cluster with the must-link pair
+    #         cluster_id += 1
     # Iterate over points
     for i in range(n):
         if visited[i] or labels[i] != -1:  # Skip visited or already clustered points
             continue
 
         # Check if the point is a core point
-        neighbors = np.where(distance_matrix[i] <= eps)[0]
-        if len(neighbors) < min_samples:
-            continue  # Not a core point, remains noise
+        # neighbors = np.where(distance_matrix[i] <= eps)[0]
+        # if len(neighbors) < min_samples:
+        #     continue  # Not a core point, remains noise
 
         # Expand the cluster
         expand_cluster(i)
@@ -253,12 +272,12 @@ def main():
         exit()
 
     # Initialing empty ML & CL lists
-    must_link_pairs = [(34,35),(35,36),(36,3),(3,39),(1,30)]  # np.load("must_link_pairs.npy", allow_pickle=True).tolist()
-    cannot_link_pairs = [(30,39),(30,35)]  # np.load("cannot_link_pairs.npy", allow_pickle=True).tolist()
+    must_link_pairs = []  # np.load("must_link_pairs.npy", allow_pickle=True).tolist()
+    cannot_link_pairs = []  # np.load("cannot_link_pairs.npy", allow_pickle=True).tolist()
 
     # Apply constrained DBSCAN
     adjusted_labels, cannot_link_dict = constrained_dbscan_with_constraints(
-        distance_matrix, eps, min_samples, must_link_pairs, cannot_link_pairs
+        distance_matrix, eps, must_link_pairs, cannot_link_pairs
     )
 
     adjusted_labels = merge_small_clusters(distance_matrix, adjusted_labels, cannot_link_dict, min_samples)
