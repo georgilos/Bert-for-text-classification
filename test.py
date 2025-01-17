@@ -33,7 +33,7 @@ def save_k_distance_plot(embeddings, k=5, save_path="images/elbow_plot.png"):
     return distances
 
 
-def calculate_contrastive_loss(centroids, embeddings, cluster_labels, temperature=0.5):
+def calculate_contrastive_loss(centroids, embeddings, cluster_labels, temperature=0.05):
     """
     Calculate the contrastive loss (L_c) based on instance-to-centroid contrastive loss.
     """
@@ -48,7 +48,7 @@ def calculate_contrastive_loss(centroids, embeddings, cluster_labels, temperatur
     centroids = F.normalize(centroids, p=2, dim=1)
 
     # Calculate logits: instance-to-centroid similarity
-    batch_size = 8
+    batch_size = 16
     logits = []
     for i in range(0, len(valid_embeddings), batch_size):
         batch_embeddings = valid_embeddings[i:i + batch_size]
@@ -251,7 +251,7 @@ def find_anchors(must_link_pairs, cannot_link_pairs):
     return true_anchors
 
 
-def iterative_training(all_texts, max_iterations=4, margin=1.0, temperature=0.5, lambda_t=1.0, batch_size=16):
+def iterative_training(all_texts, max_iterations=4, margin=1.0, temperature=0.05, lambda_t=1.0, batch_size=16):
     """
     Perform iterative training with dynamic eps and min_samples selection.
     """
@@ -333,12 +333,12 @@ def iterative_training(all_texts, max_iterations=4, margin=1.0, temperature=0.5,
 
         # Step 3: Fine-Tune Model
         print("Fine-tuning model...")
-        optimizer = torch.optim.Adam(model.parameters(), lr=5e-5)
+        optimizer = torch.optim.Adam(model.parameters(), lr=35e-5, weight_decay=1e-5)
 
         batches = assign_anchors_to_batches(all_texts, anchors, batch_size)
 
         # Adding epochs
-        num_epochs = 3  # Define the number of epochs per iteration
+        num_epochs = 5  # Define the number of epochs per iteration
         alpha = 0.25  # Momentum coefficient for memory bank updates
         for epoch in range(num_epochs):  # Start epoch loop
             print(f"Epoch {epoch + 1}/{num_epochs}")

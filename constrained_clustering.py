@@ -85,7 +85,7 @@ def constrained_dbscan_with_constraints(distance_matrix, eps, min_samples, must_
             """"
             is_valid = True
             for other_point in cluster_points:
-                if current_point in cannot_link_dict[other_point]:  # If the correct point being considered for addition to the cluster violates a cannot-link constraint
+                if current_point in cannot_link_dict[other_point]:  # If the point violates a cannot-link constraint
                     is_valid = False
                     break  # Stop checking if violation is found
 
@@ -153,7 +153,7 @@ def constrained_dbscan_with_constraints(distance_matrix, eps, min_samples, must_
         expand_cluster(i)
         cluster_id += 1  # Increment cluster ID for the next cluster
 
-    return labels, cannot_link_dict
+    return labels
 
 
 def compute_cluster_centroids(embeddings, cluster_labels):
@@ -167,21 +167,24 @@ def compute_cluster_centroids(embeddings, cluster_labels):
     Returns:
     - memory_bank (dict): A dictionary where keys are cluster IDs and values are centroids.
     """
-    centroids = {}  # Initialize memory_bank as a dictionary
+    centroids = {}  # Initialize dict
     # Ensure cluster_labels is a PyTorch tensor:
     # if not isinstance(cluster_labels, torch.Tensor):  # Remove if memory bank has errors
     #     cluster_labels = torch.tensor(cluster_labels, dtype=torch.int64)  # Remove if memory bank has errors
-    #     # Ensure cluster_labels are on the same device as embeddings:
+    # Ensure cluster_labels are on the same device as embeddings:
     cluster_labels = cluster_labels.to(embeddings.device)
     unique_clusters = torch.unique(cluster_labels[cluster_labels != -1])  # Exclude noise (-1)
     for cluster in unique_clusters:
-        cluster_tensor = torch.tensor(cluster.item(), dtype=torch.int64, device=cluster_labels.device)  # Remove if memory bank has errors
-        cluster_indices = torch.where(cluster_labels == cluster_tensor)[0]  # Find points in the cluster. "==cluster" if errors
+        # Convert a scalar tensor, into a standard PyTorch tensor
+        cluster_tensor = torch.tensor(cluster.item(), dtype=torch.int64, device=cluster_labels.device)
+        # Find the indices of the data points that belong to the current cluster
+        cluster_indices = torch.where(cluster_labels == cluster_tensor)[0]  # Find points in the cluster
         # cluster_indices = torch.where(cluster_labels == cluster)[0]
 
         cluster_embeddings = embeddings[cluster_indices]  # Get embeddings for the cluster
         # centroid = cluster_embeddings.mean(dim=0)  # Compute centroid
-        centroid = F.normalize(cluster_embeddings.mean(dim=0), p=2, dim=0) # Centroid is computed as the mean of the embeddings for points in the cluster
+        # Centroid is computed as the mean of the embeddings for points in the cluster
+        centroid = F.normalize(cluster_embeddings.mean(dim=0), p=2, dim=0)
         centroids[int(cluster.item())] = centroid  # Store as tensor in memory bank
     return centroids
 
@@ -283,15 +286,15 @@ def main():
         exit()
 
     # Initialing empty ML & CL lists
-    must_link_pairs = [(0,1),(1,2),(2,3),(3,5),(4,6),(6,9)]  # np.load("must_link_pairs.npy", allow_pickle=True).tolist()
+    must_link_pairs = [(0,1),(1,2),(2,3),(3,5),(4,6),(6,9)]  # np.load("must_link_pairs.npy",allow_pickle=True).tolist()
     cannot_link_pairs = [(5,4)]  # np.load("cannot_link_pairs.npy", allow_pickle=True).tolist()
 
     # Apply constrained DBSCAN
-    adjusted_labels, cannot_link_dict = constrained_dbscan_with_constraints(
+    adjusted_labels = constrained_dbscan_with_constraints(
         distance_matrix, eps,min_samples, must_link_pairs, cannot_link_pairs
     )
 
-    adjusted_labels = merge_small_clusters(distance_matrix, adjusted_labels, cannot_link_dict, min_samples)
+    # adjusted_labels = merge_small_clusters(distance_matrix, adjusted_labels, cannot_link_dict, min_samples)
 
     # Calculate and print noise points
     noise_points = [i for i, label in enumerate(adjusted_labels) if label == -1]
@@ -353,7 +356,7 @@ def main():
     all_embeddings = sampled_embeddings.to(device)
     # Creating memory bank
     centroids = compute_cluster_centroids(all_embeddings, adjusted_labels)
-    # Save the memory bank
+    # Save centroids
     torch.save(centroids, "centroids.pt")
     print("\nCentroids gathered and saved as 'centroids.pt' ")
 
