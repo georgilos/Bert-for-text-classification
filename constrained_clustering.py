@@ -183,8 +183,11 @@ def compute_cluster_centroids(embeddings, cluster_labels):
 
         cluster_embeddings = embeddings[cluster_indices]  # Get embeddings for the cluster
         # centroid = cluster_embeddings.mean(dim=0)  # Compute centroid
-        # Centroid is computed as the mean of the embeddings for points in the cluster
-        centroid = F.normalize(cluster_embeddings.mean(dim=0), p=2, dim=0)
+        # Compute centroid
+        centroid = cluster_embeddings.mean(dim=0)
+
+        # Normalize centroid
+        # centroid = F.normalize(centroid, p=2, dim=0)
         centroids[int(cluster.item())] = centroid  # Store as tensor in memory bank
     return centroids
 

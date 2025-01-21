@@ -40,24 +40,39 @@ def calculate_contrastive_loss(centroids, embeddings, cluster_labels, temperatur
     # Filter out noise points (cluster label == -1)
     valid_indices = cluster_labels != -1
     valid_embeddings = embeddings[valid_indices]
-    valid_embeddings = F.normalize(valid_embeddings, p=2, dim=1)
+
     valid_labels = cluster_labels[valid_indices]
+    # valid_embeddings = F.normalize(valid_embeddings, p=2, dim=1)
+    """""
 
     # Prepare the centroids for all valid points
-    centroids = torch.stack([centroids[int(label.item())] for label in valid_labels])
-    centroids = F.normalize(centroids, p=2, dim=1)
+    centroids = torch.stack([centroids[label.item()] for label in valid_labels])
+    # centroids = F.normalize(selected_centroids, p=2, dim=0)
 
     # Calculate logits: instance-to-centroid similarity
-    batch_size = 16
-    logits = []
-    for i in range(0, len(valid_embeddings), batch_size):
-        batch_embeddings = valid_embeddings[i:i + batch_size]
-        batch_logits = torch.mm(batch_embeddings, centroids.T) / temperature
-        logits.append(batch_logits)
-    logits = torch.cat(logits, dim=0)
+    logits = torch.mm(valid_embeddings, centroids.T) / temperature
 
     # Create the labels for the contrastive loss
-    labels = torch.arange(len(valid_embeddings)).to(logits.device)
+    labels = valid_labels.to(logits.device)
+    """
+
+    # Get unique cluster labels
+    unique_labels = torch.unique(valid_labels)
+
+    # Correctly stack centroids based on unique labels
+    centroids_tensor = torch.stack([centroids[label.item()] for label in unique_labels])
+    centroids_tensor = F.normalize(centroids_tensor, p=2, dim=1)  # Normalize
+
+    # Calculate logits (sacled cosine similarity between embeddings and the cluster centroids)
+    logits = torch.mm(valid_embeddings, centroids_tensor.T) / temperature
+
+    # Create labels for CrossEntropyLoss
+    labels = torch.zeros_like(valid_labels)
+    for i, label in enumerate(unique_labels):
+        labels[valid_labels == label] = i
+
+    # Move labels to the same device as logits
+    labels = labels.to(logits.device)
 
     # Calculate contrastive loss using CrossEntropyLoss
     criterion = torch.nn.CrossEntropyLoss()
@@ -266,6 +281,8 @@ def iterative_training(all_texts, max_iterations=4, margin=1.0, temperature=0.05
     print("Generating initial embeddings...")
     sampled_embeddings = generate_embeddings(all_texts, tokenizer, model, batch_size=16, use_cls=True)
     distance_matrix = cdist(sampled_embeddings.cpu().numpy(), sampled_embeddings.cpu().numpy(), metric='cosine')
+    # Set diagonal to 0
+    np.fill_diagonal(distance_matrix, 0)
 
     # Save the elbow plot for initial embeddings
     save_k_distance_plot(sampled_embeddings.cpu().numpy(), k=5, save_path="images/initial_elbow_plot.png")
@@ -280,11 +297,16 @@ def iterative_training(all_texts, max_iterations=4, margin=1.0, temperature=0.05
             f"Enter the eps value for initial clustering (default suggestion: {mean_distance * 0.5:.4f}): ") or mean_distance * 0.5)
         min_samples = int(input(f"Enter the min_samples value for initial clustering (default suggestion: 2): ") or 2)
 
+        # Initialing empty ML & CL lists
+        must_link_pairs = [(0, 1), (1, 2), (2, 3), (3, 5), (4, 6),
+                           (6, 9)]  # np.load("must_link_pairs.npy",allow_pickle=True).tolist()
+        cannot_link_pairs = [(5, 4)]  # np.load("cannot_link_pairs.npy", allow_pickle=True).tolist()
+
         # Perform initial clustering
-        adjusted_labels, cannot_link_dict = constrained_dbscan_with_constraints(distance_matrix, eps, min_samples, must_link=[],
-                                                              cannot_link=[])
-        print("Now merging clusters with instance<min_samples")
-        adjusted_labels = merge_small_clusters(distance_matrix, adjusted_labels, cannot_link_dict, min_samples)
+        adjusted_labels = constrained_dbscan_with_constraints(distance_matrix, eps, min_samples, must_link_pairs,
+                                                              cannot_link_pairs)
+        # print("Now merging clusters with instance<min_samples")
+        # adjusted_labels = merge_small_clusters(distance_matrix, adjusted_labels, cannot_link_dict, min_samples)
         # Print clustering results
         unique_clusters = np.unique(adjusted_labels)
         print(f"\nInitial Clustering Results (eps={eps}, min_samples={min_samples}):")
@@ -299,13 +321,12 @@ def iterative_training(all_texts, max_iterations=4, margin=1.0, temperature=0.05
         if user_choice == "y":
             break
         else:
-            print("Reclustering with different parameters...")
+            print("Re clustering with different parameters...")
 
     # Compute centroids
     centroids = compute_cluster_centroids(sampled_embeddings, torch.tensor(adjusted_labels, dtype=torch.int64))
 
-    # Initialize constraints
-    must_link_pairs, cannot_link_pairs = [(0, 1), (2, 3), (0, 2)], [(1, 14), (1,30), (2, 17)]
+
 
     # Iterative process
     for iteration in range(max_iterations):
@@ -326,7 +347,7 @@ def iterative_training(all_texts, max_iterations=4, margin=1.0, temperature=0.05
             for anchor, related_instances in anchors.items():
                 print(f"Anchor: {anchor}, Related Instances: {list(related_instances)}")
         else:
-            print("No anchors found.")  #########
+            print("No anchors found.")
 
         # Call the debug_pair_distances function
         debug_pair_distances(sampled_embeddings, must_link_pairs, cannot_link_pairs)
@@ -429,6 +450,8 @@ def iterative_training(all_texts, max_iterations=4, margin=1.0, temperature=0.05
         print("Recomputing embeddings and clustering...")
         # updated_embeddings = generate_embeddings(all_texts, tokenizer, model, batch_size=16, use_cls=True)
         distance_matrix = cdist(sampled_embeddings.cpu().numpy(), sampled_embeddings.cpu().numpy(), metric='cosine')
+        # Set diagonal to 0
+        np.fill_diagonal(distance_matrix, 0)
 
         # Save the elbow plot for updated embeddings
         save_k_distance_plot(sampled_embeddings.cpu().numpy(), k=5,
@@ -462,7 +485,7 @@ def iterative_training(all_texts, max_iterations=4, margin=1.0, temperature=0.05
             if user_choice == "y":
                 break
             else:
-                print("Reclustering with different parameters...")
+                print("Re clustering with different parameters...")
 
         centroids = compute_cluster_centroids(sampled_embeddings, torch.tensor(adjusted_labels, dtype=torch.int64))
 

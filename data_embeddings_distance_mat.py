@@ -4,6 +4,7 @@ import torch
 from scipy.spatial.distance import cdist
 import matplotlib.pyplot as plt
 import numpy as np
+import torch.nn.functional as F
 
 
 def generate_embeddings(texts, tokenizer, model, batch_size=16, use_cls=True):
@@ -28,7 +29,7 @@ def generate_embeddings(texts, tokenizer, model, batch_size=16, use_cls=True):
         else:
             # Apply mean pooling
             batch_embeddings = outputs.last_hidden_state.mean(dim=1)
-
+        batch_embeddings = F.normalize(batch_embeddings, p=2, dim=1)  # L2 normalization
         embeddings.append(batch_embeddings)
 
     # Stack all embeddings into a single tensor
@@ -55,6 +56,8 @@ def main():
     # Convert embeddings to NumPy array for the cdist() and compute pairwise distance matrix using cosine distance
     embeddings = sampled_embeddings.cpu().numpy()
     distance_matrix = cdist(embeddings, embeddings, metric='cosine')
+    # Set diagonal to 0
+    np.fill_diagonal(distance_matrix, 0)
 
     # Compute mean distance
     mean_distance = np.mean(distance_matrix)
