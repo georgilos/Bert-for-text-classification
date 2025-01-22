@@ -359,7 +359,7 @@ def iterative_training(all_texts, max_iterations=4, margin=1.0, temperature=0.05
         batches = assign_anchors_to_batches(all_texts, anchors, batch_size)
 
         # Adding epochs
-        num_epochs = 5  # Define the number of epochs per iteration
+        num_epochs = 1  # Define the number of epochs per iteration
         alpha = 0.25  # Momentum coefficient for memory bank updates
         for epoch in range(num_epochs):  # Start epoch loop
             print(f"Epoch {epoch + 1}/{num_epochs}")
