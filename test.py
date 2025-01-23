@@ -73,7 +73,7 @@ def calculate_contrastive_loss(centroids, embeddings, cluster_labels, temperatur
 
     # Move labels to the same device as logits
     labels = labels.to(logits.device)
-
+    labels = labels.to(torch.int64)
     # Calculate contrastive loss using CrossEntropyLoss
     criterion = torch.nn.CrossEntropyLoss()
     loss = criterion(logits, labels)
@@ -122,7 +122,7 @@ def calculate_support_pair_loss(embeddings, must_link_pairs, cannot_link_pairs, 
 
         # Debug: Print the selected hardest positive and its distance
         print(
-            f"Selected Hardest Positive Pair: ({anchor_idx}, {hardest_positive}), Distance: {positive_distances[hardest_positive_idx]:.4f}")
+            f"Selected Hardest Positive Pair with local indexes: ({anchor_idx}, {hardest_positive}), Distance: {positive_distances[hardest_positive_idx]:.4f}")
 
         # Compute global distances for cannot-link pairs
         anchor_global_idx = batch_indices[anchor_idx]
