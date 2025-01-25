@@ -250,6 +250,15 @@ def merge_small_clusters(distance_matrix, labels, cannot_link_dict, min_samples)
 
     return labels
 
+def relabel_clusters(labels):
+    """Relabels cluster IDs to be consecutive integers starting from 0."""
+    unique_labels = np.unique(labels)
+    unique_labels = unique_labels[unique_labels != -1]  # Exclude noise
+
+    new_labels = np.full_like(labels, -1)  # Initialize with noise
+    for i, cluster_id in enumerate(unique_labels):
+        new_labels[labels == cluster_id] = i  # Assign new consecutive IDs
+    return new_labels
 
 def main():
 
@@ -297,6 +306,8 @@ def main():
         distance_matrix, eps,min_samples, must_link_pairs, cannot_link_pairs
     )
 
+    # Relabeling clusters
+    adjusted_labels = relabel_clusters(adjusted_labels)
     # adjusted_labels = merge_small_clusters(distance_matrix, adjusted_labels, cannot_link_dict, min_samples)
 
     # Calculate and print noise points

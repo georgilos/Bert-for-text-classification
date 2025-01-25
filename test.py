@@ -5,7 +5,7 @@ import pandas as pd
 from transformers import BertTokenizer, BertModel
 from collections import Counter
 from scipy.spatial.distance import cdist
-from constrained_clustering import constrained_dbscan_with_constraints, merge_small_clusters, compute_cluster_centroids
+from constrained_clustering import constrained_dbscan_with_constraints, relabel_clusters, compute_cluster_centroids
 from uncertain_pairs import select_uncertain_pairs, annotate_and_update_constraints
 from data_embeddings_distance_mat import generate_embeddings
 # from hybrid_loss_training import calculate_contrastive_loss, calculate_support_pair_loss
@@ -56,27 +56,31 @@ def calculate_contrastive_loss(centroids, embeddings, cluster_labels, temperatur
     labels = valid_labels.to(logits.device)
     """
 
-    # Get unique cluster labels
-    unique_labels = torch.unique(valid_labels)
-
     # Correctly stack centroids based on unique labels
-    centroids_tensor = torch.stack([centroids[label.item()] for label in unique_labels])
-    centroids_tensor = F.normalize(centroids_tensor, p=2, dim=1)  # Normalize
+    # centroids_tensor = torch.stack([centroids[label.item()] for label in unique_labels])
+    # centroids_tensor = F.normalize(centroids_tensor, p=2, dim=1)  # Normalize
+    # Assuming 'centroids' is your dictionary
+    all_centroids = torch.stack(list(centroids.values()))
 
-    # Calculate logits (sacled cosine similarity between embeddings and the cluster centroids)
+    # Use all centroids directly
+    centroids_tensor = F.normalize(all_centroids, p=2, dim=1)  # Normalize
+
+    # Calculate logits (scaled cosine similarity between embeddings and the cluster centroids)
     logits = torch.mm(valid_embeddings, centroids_tensor.T) / temperature
-
+    """""
     # Create labels for CrossEntropyLoss
     labels = torch.zeros_like(valid_labels)
+    # Get unique cluster labels
+    unique_labels = torch.unique(valid_labels)
     for i, label in enumerate(unique_labels):
         labels[valid_labels == label] = i
-
+    """""
     # Move labels to the same device as logits
-    labels = labels.to(logits.device)
-    labels = labels.to(torch.int64)
+    valid_labels = valid_labels.to(logits.device)
+    valid_labels = valid_labels.to(torch.int64)
     # Calculate contrastive loss using CrossEntropyLoss
     criterion = torch.nn.CrossEntropyLoss()
-    loss = criterion(logits, labels)
+    loss = criterion(logits, valid_labels)
 
     return loss
 
@@ -298,13 +302,19 @@ def iterative_training(all_texts, max_iterations=4, margin=1.0, temperature=0.05
         min_samples = int(input(f"Enter the min_samples value for initial clustering (default suggestion: 2): ") or 2)
 
         # Initialing empty ML & CL lists
+        # must_link_pairs = []  # np.load("must_link_pairs.npy",allow_pickle=True).tolist()
+        # cannot_link_pairs = []  # np.load("cannot_link_pairs.npy", allow_pickle=True).tolist()
+
+        # Initialing empty ML & CL lists
         must_link_pairs = [(0, 1), (1, 2), (2, 3), (3, 5), (4, 6),
                            (6, 9)]  # np.load("must_link_pairs.npy",allow_pickle=True).tolist()
-        cannot_link_pairs = [(5, 4)]  # np.load("cannot_link_pairs.npy", allow_pickle=True).tolist()
+        cannot_link_pairs = [(5, 4)]
 
         # Perform initial clustering
         adjusted_labels = constrained_dbscan_with_constraints(distance_matrix, eps, min_samples, must_link_pairs,
                                                               cannot_link_pairs)
+        # Relabeling clusters
+        adjusted_labels = relabel_clusters(adjusted_labels)
         # print("Now merging clusters with instance<min_samples")
         # adjusted_labels = merge_small_clusters(distance_matrix, adjusted_labels, cannot_link_dict, min_samples)
         # Print clustering results
@@ -326,7 +336,7 @@ def iterative_training(all_texts, max_iterations=4, margin=1.0, temperature=0.05
     # Compute centroids
     centroids = compute_cluster_centroids(sampled_embeddings, torch.tensor(adjusted_labels, dtype=torch.int64))
 
-
+    # edw evaza pairs gia dhmiourgia merikwn anchors
 
     # Iterative process
     for iteration in range(max_iterations):
@@ -413,7 +423,7 @@ def iterative_training(all_texts, max_iterations=4, margin=1.0, temperature=0.05
                                                                 distance_matrix,
                                                                 batch_indices,
                                                                 margin,
-                                                                debug=True)
+                                                                debug=False)
                 combined_loss = contrastive_loss + lambda_t * support_pair_loss
 
                 # Log the losses for monitoring
@@ -468,9 +478,10 @@ def iterative_training(all_texts, max_iterations=4, margin=1.0, temperature=0.05
             min_samples = int(input(f"Enter the min_samples value for clustering (default suggestion: 2): ") or 2)
 
             # Perform clustering
-            adjusted_labels, cannot_link_dict = constrained_dbscan_with_constraints(distance_matrix, eps, min_samples, must_link_pairs,
+            adjusted_labels = constrained_dbscan_with_constraints(distance_matrix, eps, min_samples, must_link_pairs,
                                                                   cannot_link_pairs)
-            adjusted_labels = merge_small_clusters(distance_matrix, adjusted_labels, cannot_link_dict, min_samples)
+            # Relabeling clusters
+            adjusted_labels = relabel_clusters(adjusted_labels)
             # Print clustering results
             unique_clusters = np.unique(adjusted_labels)
             print(f"\nClustering Results (eps={eps}, min_samples={min_samples}):")
