@@ -62,11 +62,11 @@ def calculate_contrastive_loss(centroids, embeddings, cluster_labels, temperatur
     # Assuming 'centroids' is your dictionary
     all_centroids = torch.stack(list(centroids.values()))
 
-    # Use all centroids directly
-    centroids_tensor = F.normalize(all_centroids, p=2, dim=1)  # Normalize
+    # Normalize
+    # centroids_tensor = F.normalize(all_centroids, p=2, dim=1)  # Normalize
 
     # Calculate logits (scaled cosine similarity between embeddings and the cluster centroids)
-    logits = torch.mm(valid_embeddings, centroids_tensor.T) / temperature
+    logits = torch.mm(valid_embeddings, all_centroids.T) / temperature
     """""
     # Create labels for CrossEntropyLoss
     labels = torch.zeros_like(valid_labels)
@@ -89,7 +89,7 @@ def calculate_support_pair_loss(embeddings, must_link_pairs, cannot_link_pairs, 
     """
     Calculate the Support Pair Constraints Loss (L_t) based on must-link and cannot-link constraints.
     """
-    # Normalize embeddings
+    # Normalize embeddings (einai hdh normalized, mallon prepei na kanw remove)
     embeddings = F.normalize(embeddings, p=2, dim=1)
 
     # Precompute pairwise distances
@@ -302,13 +302,13 @@ def iterative_training(all_texts, max_iterations=4, margin=1.0, temperature=0.05
         min_samples = int(input(f"Enter the min_samples value for initial clustering (default suggestion: 2): ") or 2)
 
         # Initialing empty ML & CL lists
-        # must_link_pairs = []  # np.load("must_link_pairs.npy",allow_pickle=True).tolist()
-        # cannot_link_pairs = []  # np.load("cannot_link_pairs.npy", allow_pickle=True).tolist()
+        must_link_pairs = []  # np.load("must_link_pairs.npy",allow_pickle=True).tolist()
+        cannot_link_pairs = []  # np.load("cannot_link_pairs.npy", allow_pickle=True).tolist()
 
         # Initialing empty ML & CL lists
-        must_link_pairs = [(0, 1), (1, 2), (2, 3), (3, 5), (4, 6),
-                           (6, 9)]  # np.load("must_link_pairs.npy",allow_pickle=True).tolist()
-        cannot_link_pairs = [(5, 4)]
+        # must_link_pairs = [(0, 1), (1, 2), (2, 3), (3, 5), (4, 6),(6, 9)]
+                             # np.load("must_link_pairs.npy",allow_pickle=True).tolist()
+        #cannot_link_pairs = [(5, 4)]
 
         # Perform initial clustering
         adjusted_labels = constrained_dbscan_with_constraints(distance_matrix, eps, min_samples, must_link_pairs,
