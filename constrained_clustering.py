@@ -191,7 +191,7 @@ def compute_cluster_centroids(embeddings, cluster_labels):
         centroids[int(cluster.item())] = centroid  # Store as tensor in memory bank
     return centroids
 
-
+# NOT USED
 def merge_small_clusters(distance_matrix, labels, cannot_link_dict, min_samples):
     """Merges clusters with fewer instances than min_samples with their nearest valid cluster."""
     unique_labels = np.unique(labels[labels != -1])  # Exclude -1 (noise) from unique_labels
@@ -250,6 +250,7 @@ def merge_small_clusters(distance_matrix, labels, cannot_link_dict, min_samples)
 
     return labels
 
+
 def relabel_clusters(labels):
     """Relabels cluster IDs to be consecutive integers starting from 0."""
     unique_labels = np.unique(labels)
@@ -259,6 +260,7 @@ def relabel_clusters(labels):
     for i, cluster_id in enumerate(unique_labels):
         new_labels[labels == cluster_id] = i  # Assign new consecutive IDs
     return new_labels
+
 
 def main():
 
@@ -297,7 +299,7 @@ def main():
         print("Invalid input! Please enter a valid float for eps and an integer for min_samples.")
         exit()
 
-    # Initialing empty ML & CL lists
+    # Initialing ML & CL lists
     must_link_pairs = [(0,1),(1,2),(2,3),(3,5),(4,6),(6,9)]  # np.load("must_link_pairs.npy",allow_pickle=True).tolist()
     cannot_link_pairs = [(5,4)]  # np.load("cannot_link_pairs.npy", allow_pickle=True).tolist()
 
@@ -338,6 +340,7 @@ def main():
     })
     # The following line is added to resolve some unreadable character encoding problems
     clustered_data['TEXT'] = clustered_data['TEXT'].apply(lambda text: re.sub(r'\ufe0f', '', text))
+
     # Group by clusters and inspect
     for cluster_id in np.unique(adjusted_labels):
         pd.set_option('display.max_colwidth', None)  # Set to None for unlimited width

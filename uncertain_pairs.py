@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 
 
-def select_uncertain_pairs(distance_matrix, cluster_labels):
+def select_uncertain_pairs(distance_matrix, cluster_labels, must_link_pairs, cannot_link_pairs):
     """
     Select uncertain positive and negative pairs based on the clustering results and distance matrix.
 
@@ -17,6 +17,10 @@ def select_uncertain_pairs(distance_matrix, cluster_labels):
     uncertain_positive_pairs = []  # For storing uncertain positive pairs
     uncertain_negative_pairs = []  # For storing uncertain negative pairs
 
+    # Convert constraint lists to sets for faster lookup
+    must_link_set = set(must_link_pairs)
+    cannot_link_set = set(cannot_link_pairs)
+
     unique_clusters = np.unique(cluster_labels[cluster_labels != -1])  # Ignore noise (-1)
 
     # Uncertain Positive Pairs
@@ -28,7 +32,8 @@ def select_uncertain_pairs(distance_matrix, cluster_labels):
             best_pair = None
             for i in cluster_indices:
                 for j in cluster_indices:
-                    if i < j:  # Avoid duplicate comparisons
+                    if i < j and (i, j) not in must_link_set and (j, i) not in must_link_set \
+                            and (i, j) not in cannot_link_set and (j, i) not in cannot_link_set:
                         dist = distance_matrix[i, j]
                         if dist > max_dist:
                             max_dist = dist
@@ -47,10 +52,12 @@ def select_uncertain_pairs(distance_matrix, cluster_labels):
                 best_pair = None
                 for i in cluster1_indices:
                     for j in cluster2_indices:
-                        dist = distance_matrix[i, j]
-                        if dist < min_dist:
-                            min_dist = dist
-                            best_pair = (i, j, dist)
+                        if (i, j) not in must_link_set and (j, i) not in must_link_set \
+                                and (i, j) not in cannot_link_set and (j, i) not in cannot_link_set:
+                            dist = distance_matrix[i, j]
+                            if dist < min_dist:
+                                min_dist = dist
+                                best_pair = (i, j, dist)
                 if best_pair:
                     uncertain_negative_pairs.append(best_pair)
 
@@ -150,8 +157,12 @@ def main():
 
     all_texts = sampled_data['TEXT'].tolist()
 
+    # Initialize constraints
+    must_link_pairs = []
+    cannot_link_pairs = []
+
     # Select uncertain pairs
-    uncertain_positive_pairs, uncertain_negative_pairs = select_uncertain_pairs(distance_matrix, adjusted_labels)
+    uncertain_positive_pairs, uncertain_negative_pairs = select_uncertain_pairs(distance_matrix, adjusted_labels, must_link_pairs, cannot_link_pairs)
 
     # Display results
     print("\nUncertain Positive Pairs (within clusters):")
@@ -161,10 +172,6 @@ def main():
     print("\nUncertain Negative Pairs (across clusters):")
     for pair in uncertain_negative_pairs[:10]:
         print(f"Pair: {pair[0]} and {pair[1]}, Distance: {pair[2]:.4f}")
-
-    # Initialize constraints
-    must_link_pairs = []
-    cannot_link_pairs = []
 
     # Annotate uncertain pairs
     must_link_pairs, cannot_link_pairs = annotate_and_update_constraints(

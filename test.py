@@ -42,7 +42,7 @@ def calculate_contrastive_loss(centroids, embeddings, cluster_labels, temperatur
     valid_embeddings = embeddings[valid_indices]
 
     valid_labels = cluster_labels[valid_indices]
-    # valid_embeddings = F.normalize(valid_embeddings, p=2, dim=1)
+    valid_embeddings = F.normalize(valid_embeddings, p=2, dim=1)
     """""
 
     # Prepare the centroids for all valid points
@@ -63,10 +63,10 @@ def calculate_contrastive_loss(centroids, embeddings, cluster_labels, temperatur
     all_centroids = torch.stack(list(centroids.values()))
 
     # Normalize
-    # centroids_tensor = F.normalize(all_centroids, p=2, dim=1)  # Normalize
+    centroids_tensor = F.normalize(all_centroids, p=2, dim=1)  # Normalize
 
     # Calculate logits (scaled cosine similarity between embeddings and the cluster centroids)
-    logits = torch.mm(valid_embeddings, all_centroids.T) / temperature
+    logits = torch.mm(valid_embeddings, centroids_tensor.T) / temperature
     """""
     # Create labels for CrossEntropyLoss
     labels = torch.zeros_like(valid_labels)
@@ -270,7 +270,7 @@ def find_anchors(must_link_pairs, cannot_link_pairs):
     return true_anchors
 
 
-def iterative_training(all_texts, max_iterations=4, margin=1.0, temperature=0.05, lambda_t=1.0, batch_size=16):
+def iterative_training(all_texts, max_iterations=40, margin=1.0, temperature=0.05, lambda_t=1.0, batch_size=16):
     """
     Perform iterative training with dynamic eps and min_samples selection.
     """
@@ -289,7 +289,7 @@ def iterative_training(all_texts, max_iterations=4, margin=1.0, temperature=0.05
     np.fill_diagonal(distance_matrix, 0)
 
     # Save the elbow plot for initial embeddings
-    save_k_distance_plot(sampled_embeddings.cpu().numpy(), k=5, save_path="images/initial_elbow_plot.png")
+    # save_k_distance_plot(sampled_embeddings.cpu().numpy(), k=5, save_path="images/initial_elbow_plot.png")
 
     # Calculate and display mean pairwise distance
     mean_distance = np.mean(distance_matrix)
@@ -343,7 +343,7 @@ def iterative_training(all_texts, max_iterations=4, margin=1.0, temperature=0.05
         print(f"\nIteration {iteration}:")
 
         # Step 2: Select Uncertain Pairs and Annotate
-        uncertain_positive_pairs, uncertain_negative_pairs = select_uncertain_pairs(distance_matrix, adjusted_labels)
+        uncertain_positive_pairs, uncertain_negative_pairs = select_uncertain_pairs(distance_matrix, adjusted_labels, must_link_pairs, cannot_link_pairs)
         must_link_pairs, cannot_link_pairs = annotate_and_update_constraints(
             uncertain_positive_pairs, uncertain_negative_pairs, all_texts, must_link_pairs, cannot_link_pairs
         )
@@ -408,15 +408,16 @@ def iterative_training(all_texts, max_iterations=4, margin=1.0, temperature=0.05
                     (index_map[a], index_map[b]) for (a, b) in batch_cannot_link_pairs
                 ]
 
-                # Compute hybrid loss
-                contrastive_loss = calculate_contrastive_loss(centroids, batch_embeddings,
-                                                              torch.tensor(adjusted_labels)[batch_indices], temperature)
-
                 # Log global distances for all batch pairs
                 print("Global Distances for Batch:")
                 for a, b in batch_must_link_pairs + batch_cannot_link_pairs:
                     global_a, global_b = batch_indices[a], batch_indices[b]
                     print(f"Global Pair ({global_a}, {global_b}), Distance: {distance_matrix[global_a, global_b]:.4f}")
+
+                # Compute hybrid loss
+                contrastive_loss = calculate_contrastive_loss(centroids, batch_embeddings,
+                                                              torch.tensor(adjusted_labels)[batch_indices],
+                                                              temperature)
 
                 support_pair_loss = calculate_support_pair_loss(batch_embeddings, batch_must_link_pairs,
                                                                 batch_cannot_link_pairs,
@@ -464,8 +465,8 @@ def iterative_training(all_texts, max_iterations=4, margin=1.0, temperature=0.05
         np.fill_diagonal(distance_matrix, 0)
 
         # Save the elbow plot for updated embeddings
-        save_k_distance_plot(sampled_embeddings.cpu().numpy(), k=5,
-                             save_path=f"images/elbow_plot_iteration_{iteration + 1}.png")
+        # save_k_distance_plot(sampled_embeddings.cpu().numpy(), k=5,
+        #                      save_path=f"images/elbow_plot_iteration_{iteration + 1}.png")
 
         # Calculate and display mean pairwise distance
         mean_distance = np.mean(distance_matrix)
@@ -551,11 +552,11 @@ def main():
     sampled_data = sampled_data[sampled_data['TEXT'].str.strip() != '']
 
     # Sample and prepare the data
-    sampled_data = sampled_data.sample(n=100, random_state=75)  # Randomly sample 100 rows
+    sampled_data = sampled_data.sample(n=100, random_state=34)  # Randomly sample 100 rows
     all_texts = sampled_data['TEXT'].tolist()
 
     # Run iterative training
-    iterative_training(all_texts, max_iterations=4, batch_size=16)
+    iterative_training(all_texts, max_iterations=40, batch_size=16)
 
 
 if __name__ == "__main__":
