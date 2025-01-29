@@ -70,6 +70,9 @@ def annotate_and_update_constraints(
 ):
     """
     Annotates uncertain pairs and updates must-link and cannot-link constraints.
+    Includes a 'b' option to go back and re-annotate the previous pair.
+    Adds a final check after the last pair of uncertain positives and negatives.
+    Ensures re-annotating pairs correctly updates the counters.
 
     Parameters:
     - uncertain_positive_pairs (list): List of uncertain positive pairs (index1, index2, distance).
@@ -86,41 +89,141 @@ def annotate_and_update_constraints(
     new_must_link_count = 0
     new_cannot_link_count = 0
 
-    print("Annotating Uncertain Positive Pairs (Within Clusters):")
-    for i, j, dist in uncertain_positive_pairs:
-        print(f"\nPair: ({i}, {j}), Distance: {dist:.4f}")
-        print(f"Text 1: {all_texts[i]}")
-        print(f"Text 2: {all_texts[j]}")
-        while True:  # Keep asking for valid input
-            decision = input("Should these belong in the same cluster? (y/n): ").strip().lower()
+    # Track the history of annotations
+    annotation_history = []
+
+    def undo_last_annotation():
+        nonlocal new_must_link_count, new_cannot_link_count
+        if annotation_history:
+            last_annotation = annotation_history.pop()
+            pair, constraint_type = last_annotation
+            if constraint_type == 'must_link':
+                must_link_pairs.remove(pair)
+                new_must_link_count -= 1  # Decrement the counter
+            elif constraint_type == 'cannot_link':
+                cannot_link_pairs.remove(pair)
+                new_cannot_link_count -= 1  # Decrement the counter
+            print(f"Undid last annotation for pair: {pair}")
+        else:
+            print("No previous annotation to undo.")
+
+    def annotate_pairs(pairs, is_positive=True):
+        nonlocal new_must_link_count, new_cannot_link_count
+        idx = 0
+        while idx < len(pairs):
+            i, j, dist = pairs[idx]
+            print(f"\nPair: ({i}, {j}), Distance: {dist:.4f}")
+            print(f"Text 1: {all_texts[i]}")
+            print(f"Text 2: {all_texts[j]}")
+            decision = input("Should these belong in the same cluster? (y/n/b): " if is_positive else "Should these belong in different clusters? (y/n/b): ").strip().lower()
             if decision == "y":
-                must_link_pairs.append((i, j))
-                new_must_link_count += 1
-                break
+                # Remove previous annotation if it exists
+                if (i, j) in must_link_pairs:
+                    must_link_pairs.remove((i, j))
+                    new_must_link_count -= 1  # Decrement the counter
+                if (i, j) in cannot_link_pairs:
+                    cannot_link_pairs.remove((i, j))
+                    new_cannot_link_count -= 1  # Decrement the counter
+                # Add new annotation
+                if is_positive:
+                    must_link_pairs.append((i, j))
+                    new_must_link_count += 1
+                    annotation_history.append(((i, j), 'must_link'))
+                else:
+                    cannot_link_pairs.append((i, j))
+                    new_cannot_link_count += 1
+                    annotation_history.append(((i, j), 'cannot_link'))
+                idx += 1
             elif decision == "n":
-                cannot_link_pairs.append((i, j))
-                new_cannot_link_count += 1
-                break
+                # Remove previous annotation if it exists
+                if (i, j) in must_link_pairs:
+                    must_link_pairs.remove((i, j))
+                    new_must_link_count -= 1  # Decrement the counter
+                if (i, j) in cannot_link_pairs:
+                    cannot_link_pairs.remove((i, j))
+                    new_cannot_link_count -= 1  # Decrement the counter
+                # Add new annotation
+                if is_positive:
+                    cannot_link_pairs.append((i, j))
+                    new_cannot_link_count += 1
+                    annotation_history.append(((i, j), 'cannot_link'))
+                else:
+                    must_link_pairs.append((i, j))
+                    new_must_link_count += 1
+                    annotation_history.append(((i, j), 'must_link'))
+                idx += 1
+            elif decision == "b":
+                if idx > 0:
+                    # Go back to the previous pair
+                    idx -= 1
+                    undo_last_annotation()
+                else:
+                    print("Cannot go back further. This is the first pair.")
             else:
-                print("Invalid input. Please enter 'y' or 'n'.")
+                print("Invalid input. Please enter 'y', 'n', or 'b'.")
+
+        # Final check after the last pair
+        if len(pairs) > 0:
+            print("\nFinished annotating all pairs. Would you like to go back and re-annotate any pair? (y/n): ")
+            final_decision = input().strip().lower()
+            if final_decision == "y":
+                # Allow going back to any pair
+                while True:
+                    try:
+                        pair_idx = int(input(f"Enter the index of the pair you want to re-annotate (0 to {len(pairs) - 1}): "))
+                        if 0 <= pair_idx < len(pairs):
+                            i, j, dist = pairs[pair_idx]
+                            print(f"\nRe-annotating Pair: ({i, j}), Distance: {dist:.4f}")
+                            print(f"Text 1: {all_texts[i]}")
+                            print(f"Text 2: {all_texts[j]}")
+                            decision = input("Should these belong in the same cluster? (y/n): " if is_positive else "Should these belong in different clusters? (y/n): ").strip().lower()
+                            if decision == "y":
+                                # Remove previous annotation if it exists
+                                if (i, j) in must_link_pairs:
+                                    must_link_pairs.remove((i, j))
+                                    new_must_link_count -= 1  # Decrement the counter
+                                if (i, j) in cannot_link_pairs:
+                                    cannot_link_pairs.remove((i, j))
+                                    new_cannot_link_count -= 1  # Decrement the counter
+                                # Add new annotation
+                                if is_positive:
+                                    must_link_pairs.append((i, j))
+                                    new_must_link_count += 1
+                                else:
+                                    cannot_link_pairs.append((i, j))
+                                    new_cannot_link_count += 1
+                            elif decision == "n":
+                                # Remove previous annotation if it exists
+                                if (i, j) in must_link_pairs:
+                                    must_link_pairs.remove((i, j))
+                                    new_must_link_count -= 1  # Decrement the counter
+                                if (i, j) in cannot_link_pairs:
+                                    cannot_link_pairs.remove((i, j))
+                                    new_cannot_link_count -= 1  # Decrement the counter
+                                # Add new annotation
+                                if is_positive:
+                                    cannot_link_pairs.append((i, j))
+                                    new_cannot_link_count += 1
+                                else:
+                                    must_link_pairs.append((i, j))
+                                    new_must_link_count += 1
+                            else:
+                                print("Invalid input. Please enter 'y' or 'n'.")
+                        else:
+                            print("Invalid index. Please enter a valid index.")
+                    except ValueError:
+                        print("Invalid input. Please enter a valid index.")
+
+                    # Ask if the user wants to re-annotate another pair
+                    another = input("Do you want to re-annotate another pair? (y/n): ").strip().lower()
+                    if another != "y":
+                        break
+
+    print("Annotating Uncertain Positive Pairs (Within Clusters):")
+    annotate_pairs(uncertain_positive_pairs, is_positive=True)
 
     print("\nAnnotating Uncertain Negative Pairs (Across Clusters):")
-    for i, j, dist in uncertain_negative_pairs:
-        print(f"\nPair: ({i}, {j}), Distance: {dist:.4f}")
-        print(f"Text 1: {all_texts[i]}")
-        print(f"Text 2: {all_texts[j]}")
-        while True:  # Keep asking for valid input
-            decision = input("Should these belong in different clusters? (y/n): ").strip().lower()
-            if decision == "y":
-                cannot_link_pairs.append((i, j))
-                new_cannot_link_count += 1
-                break
-            elif decision == "n":
-                must_link_pairs.append((i, j))
-                new_must_link_count += 1
-                break
-            else:
-                print("Invalid input. Please enter 'y' or 'n'.")
+    annotate_pairs(uncertain_negative_pairs, is_positive=False)
 
     # Display constraint updates
     print(f"\nCreated {new_must_link_count} must link constraints in this iteration.")

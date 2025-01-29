@@ -270,7 +270,7 @@ def find_anchors(must_link_pairs, cannot_link_pairs):
     return true_anchors
 
 
-def iterative_training(all_texts, max_iterations=40, margin=1.0, temperature=0.05, lambda_t=1.0, batch_size=16):
+def iterative_training(all_texts, max_iterations=40, margin=1.0, temperature=0.05, lambda_t=1.0, batch_size=32):
     """
     Perform iterative training with dynamic eps and min_samples selection.
     """
@@ -556,7 +556,7 @@ def main():
     all_texts = sampled_data['TEXT'].tolist()
 
     # Run iterative training
-    iterative_training(all_texts, max_iterations=40, batch_size=16)
+    iterative_training(all_texts, max_iterations=20, batch_size=32)
 
 
 if __name__ == "__main__":
