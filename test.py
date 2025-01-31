@@ -13,6 +13,7 @@ import torch.nn.functional as F
 from sklearn.neighbors import NearestNeighbors
 import matplotlib.pyplot as plt
 # import os
+import random
 
 
 def save_k_distance_plot(embeddings, k=5, save_path="images/elbow_plot.png"):
@@ -176,6 +177,8 @@ def calculate_support_pair_loss(embeddings, must_link_pairs, cannot_link_pairs, 
 def assign_anchors_to_batches(all_texts, anchors, batch_size):
     """
     Create batches prioritizing anchors and their related instances.
+    Each anchor and its related instances are assigned to their own batch.
+    Remaining instances are shuffled and assigned to batches of fixed size.
 
     Parameters:
     - all_texts: List of all instances.
@@ -185,33 +188,29 @@ def assign_anchors_to_batches(all_texts, anchors, batch_size):
     Returns:
     - batches: List of batches, where each batch is a list of indices.
     """
-    all_indices = set(range(len(all_texts)))
+    all_indices = set(range(len(all_texts)))  # All instance indices
     batches = []
 
-    # Assign anchors and their related instances to batches
+    # Step 1: Assign anchors and their related instances to batches
     for anchor, related_instances in anchors.items():
-        batch = {anchor}.union(related_instances)
-        if len(batch) > batch_size:
-            raise ValueError("Anchor and related instances exceed batch size.")
-        batches.append(list(batch))
-        all_indices -= batch
-
-    # Fill remaining slots in each batch
-    for batch in batches:
-        remaining_slots = batch_size - len(batch)
-        if remaining_slots > 0:
-            additional_indices = list(all_indices)[:remaining_slots]
-            batch.extend(additional_indices)
-            all_indices -= set(additional_indices)
-
-    # Handle any remaining indices
-    while all_indices:
-        batch = list(all_indices)[:batch_size]
+        # Create a batch with the anchor and its related instances
+        batch = [anchor] + list(related_instances)
         batches.append(batch)
-        all_indices -= set(batch)
+
+    # Step 2: Collect all instances used in anchor-related batches
+    used_instances = set()
+    for batch in batches:
+        used_instances.update(batch)
+
+    # Step 3: Assign remaining instances to batches of fixed size
+    remaining_instances = list(all_indices - used_instances)
+    random.shuffle(remaining_instances)  # Shuffle remaining instances
+
+    for i in range(0, len(remaining_instances), batch_size):
+        batch = remaining_instances[i:i + batch_size]
+        batches.append(batch)
 
     return batches
-
 
 def debug_pair_distances(embeddings, must_link_pairs, cannot_link_pairs):
     """
@@ -270,7 +269,7 @@ def find_anchors(must_link_pairs, cannot_link_pairs):
     return true_anchors
 
 
-def iterative_training(all_texts, max_iterations=30, margin=1.0, temperature=0.05, lambda_t=1.0, batch_size=32):
+def iterative_training(all_texts, max_iterations=20, margin=1.0, temperature=0.05, lambda_t=1.0, batch_size=32):
     """
     Perform iterative training with dynamic eps and min_samples selection.
     """
@@ -302,8 +301,8 @@ def iterative_training(all_texts, max_iterations=30, margin=1.0, temperature=0.0
         min_samples = int(input(f"Enter the min_samples value for initial clustering (default suggestion: 2): ") or 2)
 
         # Initialing empty ML & CL lists
-        # must_link_pairs = []  # np.load("must_link_pairs.npy",allow_pickle=True).tolist()
-        # cannot_link_pairs = []  # np.load("cannot_link_pairs.npy", allow_pickle=True).tolist()
+        #must_link_pairs = []  # np.load("must_link_pairs.npy",allow_pickle=True).tolist()
+        #cannot_link_pairs = []  # np.load("cannot_link_pairs.npy", allow_pickle=True).tolist()
 
         # Initialing empty ML & CL lists
         must_link_pairs = [(0, 1), (1, 2), (2, 3), (3, 5), (4, 6), (6, 9)]
@@ -556,7 +555,7 @@ def main():
     all_texts = sampled_data['TEXT'].tolist()
 
     # Run iterative training
-    iterative_training(all_texts, max_iterations=30, batch_size=32)
+    iterative_training(all_texts, max_iterations=20, batch_size=32)
 
 
 if __name__ == "__main__":
