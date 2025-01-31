@@ -192,8 +192,9 @@ def compute_cluster_centroids(embeddings, cluster_labels):
     return centroids
 
 # NOT USED
+""""
 def merge_small_clusters(distance_matrix, labels, cannot_link_dict, min_samples):
-    """Merges clusters with fewer instances than min_samples with their nearest valid cluster."""
+    
     unique_labels = np.unique(labels[labels != -1])  # Exclude -1 (noise) from unique_labels
     cluster_counts = Counter(labels)
 
@@ -249,7 +250,7 @@ def merge_small_clusters(distance_matrix, labels, cannot_link_dict, min_samples)
                 labels[labels == cluster_id] = nearest_cluster_id
 
     return labels
-
+"""""
 
 def relabel_clusters(labels):
     """Relabels cluster IDs to be consecutive integers starting from 0."""

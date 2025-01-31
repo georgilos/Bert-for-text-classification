@@ -121,7 +121,7 @@ def calculate_support_pair_loss(embeddings, must_link_pairs, cannot_link_pairs, 
         print(f"Anchor is located in the index: {anchor_idx}, Must-Link Distances: {positive_distances}")
 
         # Select the hardest positive (largest distance)
-        hardest_positive_idx = torch.argmax(torch.tensor(positive_distances))
+        hardest_positive_idx = torch.argmax(torch.tensor(positive_distances, dtype=torch.float32))
         hardest_positive = positives[hardest_positive_idx]
 
         # Debug: Print the selected hardest positive and its distance
@@ -129,14 +129,14 @@ def calculate_support_pair_loss(embeddings, must_link_pairs, cannot_link_pairs, 
             f"Selected Hardest Positive Pair with local indexes: ({anchor_idx}, {hardest_positive}), Distance: {positive_distances[hardest_positive_idx]:.4f}")
 
         # Compute global distances for cannot-link pairs
-        anchor_global_idx = batch_indices[anchor_idx]
-        negative_distances = [distance_matrix[anchor_global_idx, batch_indices[n]] for n in negatives]
+        # anchor_global_idx = batch_indices[anchor_idx]
+        negative_distances = [distance_matrix[batch_indices[anchor_idx], batch_indices[n]] for n in negatives]
 
         # Debug: Print all negative distances
         print(f"Anchor is located in the index: {anchor_idx}, Cannot-Link Distances: {negative_distances}")
 
         # Select the hardest negative (smallest global distance)
-        hardest_negative_idx = torch.argmin(torch.tensor(negative_distances))
+        hardest_negative_idx = torch.argmin(torch.tensor(negative_distances, dtype=torch.float32))
         hardest_negative = negatives[hardest_negative_idx]
 
         # Debug: Print the selected hardest negative and its distance
@@ -147,10 +147,10 @@ def calculate_support_pair_loss(embeddings, must_link_pairs, cannot_link_pairs, 
 
         # Compute triplet loss
         # Replace batch-local distance computation with global distance lookup
-        positive_distance = torch.tensor(distance_matrix[anchor_global_idx, hardest_positive_global_idx],
-                                         device=embeddings.device)
-        negative_distance = torch.tensor(distance_matrix[anchor_global_idx, hardest_negative_global_idx],
-                                         device=embeddings.device)
+        positive_distance = torch.tensor(distance_matrix[batch_indices[anchor_idx], hardest_positive_global_idx],dtype=torch.float32,
+                                         device=embeddings.device, requires_grad=True)
+        negative_distance = torch.tensor(distance_matrix[batch_indices[anchor_idx], hardest_negative_global_idx],dtype=torch.float32,
+                                         device=embeddings.device, requires_grad=True)
 
         triplet_loss = F.relu(positive_distance - negative_distance + margin)
         triplet_losses.append(triplet_loss)
@@ -270,7 +270,7 @@ def find_anchors(must_link_pairs, cannot_link_pairs):
     return true_anchors
 
 
-def iterative_training(all_texts, max_iterations=40, margin=1.0, temperature=0.05, lambda_t=1.0, batch_size=32):
+def iterative_training(all_texts, max_iterations=30, margin=1.0, temperature=0.05, lambda_t=1.0, batch_size=32):
     """
     Perform iterative training with dynamic eps and min_samples selection.
     """
@@ -302,13 +302,13 @@ def iterative_training(all_texts, max_iterations=40, margin=1.0, temperature=0.0
         min_samples = int(input(f"Enter the min_samples value for initial clustering (default suggestion: 2): ") or 2)
 
         # Initialing empty ML & CL lists
-        must_link_pairs = []  # np.load("must_link_pairs.npy",allow_pickle=True).tolist()
-        cannot_link_pairs = []  # np.load("cannot_link_pairs.npy", allow_pickle=True).tolist()
+        # must_link_pairs = []  # np.load("must_link_pairs.npy",allow_pickle=True).tolist()
+        # cannot_link_pairs = []  # np.load("cannot_link_pairs.npy", allow_pickle=True).tolist()
 
         # Initialing empty ML & CL lists
-        # must_link_pairs = [(0, 1), (1, 2), (2, 3), (3, 5), (4, 6),(6, 9)]
+        must_link_pairs = [(0, 1), (1, 2), (2, 3), (3, 5), (4, 6), (6, 9)]
                              # np.load("must_link_pairs.npy",allow_pickle=True).tolist()
-        #cannot_link_pairs = [(5, 4)]
+        cannot_link_pairs = [(5, 4)]
 
         # Perform initial clustering
         adjusted_labels = constrained_dbscan_with_constraints(distance_matrix, eps, min_samples, must_link_pairs,
@@ -552,11 +552,11 @@ def main():
     sampled_data = sampled_data[sampled_data['TEXT'].str.strip() != '']
 
     # Sample and prepare the data
-    sampled_data = sampled_data.sample(n=100, random_state=34)  # Randomly sample 100 rows
+    sampled_data = sampled_data.sample(n=100, random_state=30)  # Randomly sample 100 rows
     all_texts = sampled_data['TEXT'].tolist()
 
     # Run iterative training
-    iterative_training(all_texts, max_iterations=20, batch_size=32)
+    iterative_training(all_texts, max_iterations=30, batch_size=32)
 
 
 if __name__ == "__main__":
