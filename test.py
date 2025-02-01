@@ -282,7 +282,7 @@ def iterative_training(all_texts, max_iterations=20, margin=1.0, temperature=0.0
 
     # Step 1: Generate Initial Embeddings
     print("Generating initial embeddings...")
-    sampled_embeddings = generate_embeddings(all_texts, tokenizer, model, batch_size=16, use_cls=True)
+    sampled_embeddings = generate_embeddings(all_texts, tokenizer, model, batch_size=32, use_cls=True)
     distance_matrix = cdist(sampled_embeddings.cpu().numpy(), sampled_embeddings.cpu().numpy(), metric='cosine')
     # Set diagonal to 0
     np.fill_diagonal(distance_matrix, 0)
@@ -301,8 +301,8 @@ def iterative_training(all_texts, max_iterations=20, margin=1.0, temperature=0.0
         min_samples = int(input(f"Enter the min_samples value for initial clustering (default suggestion: 2): ") or 2)
 
         # Initialing empty ML & CL lists
-        #must_link_pairs = []  # np.load("must_link_pairs.npy",allow_pickle=True).tolist()
-        #cannot_link_pairs = []  # np.load("cannot_link_pairs.npy", allow_pickle=True).tolist()
+        # must_link_pairs = []  # np.load("must_link_pairs.npy",allow_pickle=True).tolist()
+        # cannot_link_pairs = []  # np.load("cannot_link_pairs.npy", allow_pickle=True).tolist()
 
         # Initialing empty ML & CL lists
         must_link_pairs = [(0, 1), (1, 2), (2, 3), (3, 5), (4, 6), (6, 9)]
@@ -555,7 +555,7 @@ def main():
     all_texts = sampled_data['TEXT'].tolist()
 
     # Run iterative training
-    iterative_training(all_texts, max_iterations=20, batch_size=32)
+    iterative_training(all_texts, max_iterations=20, batch_size=32) # Run algorithm for 20 repetitions
 
 
 if __name__ == "__main__":

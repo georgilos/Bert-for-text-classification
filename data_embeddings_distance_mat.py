@@ -7,7 +7,7 @@ import numpy as np
 import torch.nn.functional as F
 
 
-def generate_embeddings(texts, tokenizer, model, batch_size=16, use_cls=True):
+def generate_embeddings(texts, tokenizer, model, batch_size=32, use_cls=True):
 
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     model.to(device)  # Ensure the model is on the correct device
@@ -51,7 +51,7 @@ def main():
 
     # Generate embeddings for the sampled data
     sampled_texts = sampled_data['TEXT'].tolist()
-    sampled_embeddings = generate_embeddings(sampled_texts, tokenizer, model, batch_size=16, use_cls=True)
+    sampled_embeddings = generate_embeddings(sampled_texts, tokenizer, model, batch_size=32, use_cls=True)
 
     # Convert embeddings to NumPy array for the cdist() and compute pairwise distance matrix using cosine distance
     embeddings = sampled_embeddings.cpu().numpy()
