@@ -1,6 +1,6 @@
 ## For the iterative algorithm (current max iterations = 20) with the training loop: test.py -> inference.py 
 
-## To test the clustering and annotation function : data_embeddings_distance_mat.py -> contrained_clustering.py -> uncertain_pairs.py 
+## To test the clustering and annotation functions : data_embeddings_distance_mat.py -> contrained_clustering.py -> uncertain_pairs.py 
 
 ### Dropbox link: https://www.dropbox.com/scl/fo/brj59vrixis5rkz5182j3/h?rlkey=nnhu2eoh48wutke73ezntvs3w&st=x5iiz72a&dl=0
 
