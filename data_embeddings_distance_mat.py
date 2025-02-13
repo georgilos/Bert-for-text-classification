@@ -7,7 +7,7 @@ import numpy as np
 import torch.nn.functional as F
 
 
-def generate_embeddings(texts, tokenizer, model, batch_size=32, use_cls=True):
+def generate_embeddings(texts, tokenizer, model, batch_size=32):
 
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     model.to(device)  # Ensure the model is on the correct device
@@ -21,15 +21,17 @@ def generate_embeddings(texts, tokenizer, model, batch_size=32, use_cls=True):
 
         with torch.no_grad():
             outputs = model(**inputs)
-        if use_cls:
+        # if use_cls:
             # Extract [CLS] token embedding
             # `outputs.last_hidden_state` is a tensor of shape (batch_size, sequence_length, hidden_size)
             # We use the `[CLS]` token's embedding for each sentence (index 0 along sequence_length)
             batch_embeddings = outputs.last_hidden_state[:, 0, :]
-        else:
-            # Apply mean pooling
-            batch_embeddings = outputs.last_hidden_state.mean(dim=1)
+        # else:
+        #     # Apply mean pooling
+        #     batch_embeddings = outputs.last_hidden_state.mean(dim=1)
+        # print("Pre-normalization",torch.norm(batch_embeddings, p=2, dim=1))
         batch_embeddings = F.normalize(batch_embeddings, p=2, dim=1)  # L2 normalization
+        # print("Post-normalization",torch.norm(batch_embeddings, p=2, dim=1))
         embeddings.append(batch_embeddings)
 
     # Stack all embeddings into a single tensor
@@ -39,7 +41,7 @@ def generate_embeddings(texts, tokenizer, model, batch_size=32, use_cls=True):
 def main():
 
     # Load unlabeled data
-    unlabeled_data = pd.read_csv('data/unlabeled_data/cleaned_texts_unlabeled.csv', header=None, encoding='utf-8')
+    unlabeled_data = pd.read_csv('data/unlabeled_data/cleaned_texts_unlabeled_clear.csv', header=None, encoding='utf-8')
     # Because the .csv file has no headers, we must assign them
     unlabeled_data.columns = ['ID', 'TEXT']
     # Randomly select 100 rows
@@ -51,7 +53,7 @@ def main():
 
     # Generate embeddings for the sampled data
     sampled_texts = sampled_data['TEXT'].tolist()
-    sampled_embeddings = generate_embeddings(sampled_texts, tokenizer, model, batch_size=32, use_cls=True)
+    sampled_embeddings = generate_embeddings(sampled_texts, tokenizer, model, batch_size=32)
 
     # Convert embeddings to NumPy array for the cdist() and compute pairwise distance matrix using cosine distance
     embeddings = sampled_embeddings.cpu().numpy()

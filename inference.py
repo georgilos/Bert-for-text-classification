@@ -37,7 +37,7 @@ def classify_text(texts, model, tokenizer, memory_bank, cluster_labels):
     Classify texts based on the nearest cluster centroid using cosine similarity.
     """
     # Generate embeddings for the texts (batch processing)
-    embeddings = generate_embeddings(texts, tokenizer, model, batch_size=32, use_cls=True)
+    embeddings = generate_embeddings(texts, tokenizer, model, batch_size=32)
     embeddings = embeddings.cpu().numpy()  # Ensure embeddings are on CPU for distance calculation
 
     # Move centroids to CPU and convert to NumPy array
@@ -62,7 +62,7 @@ def classify_text(texts, model, tokenizer, memory_bank, cluster_labels):
 def main():
     # File paths
     model_path = "./models/fine_tuned_bert.pth"
-    memory_bank_path = "./models/final_memory_bank.pt"
+    memory_bank_path = "./models/final_centroids.pt"
     cluster_labels_path = "./models/cluster_labels.json"
     input_texts_path = "./data/unseen_texts.csv"  # File containing unseen texts
     output_predictions_path = "./results/predictions.csv"

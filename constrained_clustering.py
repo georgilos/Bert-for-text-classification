@@ -300,9 +300,12 @@ def main():
         print("Invalid input! Please enter a valid float for eps and an integer for min_samples.")
         exit()
 
-    # Initialing ML & CL lists
+    # Initialing ML & CL lists. Add the ML (0,9) pair for a conflict
     must_link_pairs = [(0,1),(1,2),(2,3),(3,5),(4,6),(6,9)]  # np.load("must_link_pairs.npy",allow_pickle=True).tolist()
     cannot_link_pairs = [(5,4)]  # np.load("cannot_link_pairs.npy", allow_pickle=True).tolist()
+
+    # must_link_pairs = []
+    # cannot_link_pairs = []
 
     # Apply constrained DBSCAN
     adjusted_labels = constrained_dbscan_with_constraints(

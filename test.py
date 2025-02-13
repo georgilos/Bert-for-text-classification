@@ -34,6 +34,48 @@ def save_k_distance_plot(embeddings, k=5, save_path="images/elbow_plot.png"):
     return distances
 
 
+def visualize_clusters(embeddings, labels, method='pca', iteration=None):
+    """
+    Visualize clusters using PCA, t-SNE, or UMAP and save the plot to the "images" folder.
+
+    Parameters:
+    - embeddings: Tensor containing the embeddings of all instances.
+    - labels: Cluster labels or instance IDs.
+    - method: Dimensionality reduction method ('pca', 'tsne', or 'umap').
+    - iteration: Current iteration number for naming the saved image file.
+    """
+    if method == 'pca':
+        from sklearn.decomposition import PCA
+        reducer = PCA(n_components=2)
+    elif method == 'tsne':
+        from sklearn.manifold import TSNE
+        reducer = TSNE(n_components=2, random_state=42)
+    elif method == 'umap':
+        import umap
+        reducer = umap.UMAP(n_components=2, random_state=42)
+    else:
+        raise ValueError("Invalid method. Choose 'pca', 'tsne', or 'umap'.")
+
+    # Reduce embeddings to 2D
+    reduced_embeddings = reducer.fit_transform(embeddings.cpu().numpy())
+
+    # Plot the clusters
+    plt.figure(figsize=(12, 10))
+    plt.scatter(reduced_embeddings[:, 0], reduced_embeddings[:, 1], s=10)  # Plot points without color mapping
+    plt.title(f"Cluster Visualization ({method.upper()}) - Iteration {iteration}")
+
+    # Annotate each point with its instance ID
+    for i, (x, y) in enumerate(reduced_embeddings):
+        plt.text(x, y, str(labels[i]), fontsize=8, ha='right', va='bottom')  # Add text annotation
+
+    # Save the plot to the "images" folder
+    os.makedirs("images", exist_ok=True)
+    save_path = f"images/cluster_visualization_iteration_{iteration}.png"
+    plt.savefig(save_path)
+    print(f"Cluster visualization saved at: {save_path}")
+    plt.close()  # Free resources
+
+
 def calculate_contrastive_loss(centroids, embeddings, cluster_labels, temperature=0.05):
     """
     Calculate the contrastive loss (L_c) based on instance-to-centroid contrastive loss.
@@ -212,6 +254,7 @@ def assign_anchors_to_batches(all_texts, anchors, batch_size):
 
     return batches
 
+
 def debug_pair_distances(embeddings, must_link_pairs, cannot_link_pairs):
     """
     Print the distances of all must-link and cannot-link pairs.
@@ -276,13 +319,13 @@ def iterative_training(all_texts, max_iterations=20, margin=1.0, temperature=0.0
     # Initialize tokenizer and model
     tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
     model = BertModel.from_pretrained('bert-base-uncased')
-    model.train()
+    model.eval()
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     model.to(device)
 
     # Step 1: Generate Initial Embeddings
     print("Generating initial embeddings...")
-    sampled_embeddings = generate_embeddings(all_texts, tokenizer, model, batch_size=32, use_cls=True)
+    sampled_embeddings = generate_embeddings(all_texts, tokenizer, model, batch_size=32)
     distance_matrix = cdist(sampled_embeddings.cpu().numpy(), sampled_embeddings.cpu().numpy(), metric='cosine')
     # Set diagonal to 0
     np.fill_diagonal(distance_matrix, 0)
@@ -301,13 +344,13 @@ def iterative_training(all_texts, max_iterations=20, margin=1.0, temperature=0.0
         min_samples = int(input(f"Enter the min_samples value for initial clustering (default suggestion: 2): ") or 2)
 
         # Initialing empty ML & CL lists
-        # must_link_pairs = []  # np.load("must_link_pairs.npy",allow_pickle=True).tolist()
-        # cannot_link_pairs = []  # np.load("cannot_link_pairs.npy", allow_pickle=True).tolist()
+        must_link_pairs = []  # np.load("must_link_pairs.npy",allow_pickle=True).tolist()
+        cannot_link_pairs = []  # np.load("cannot_link_pairs.npy", allow_pickle=True).tolist()
 
         # Initialing empty ML & CL lists
-        must_link_pairs = [(0, 1), (1, 2), (2, 3), (3, 5), (4, 6), (6, 9)]
+        # must_link_pairs = [(0, 1), (1, 2), (2, 3), (3, 5), (4, 6), (6, 9)]
                              # np.load("must_link_pairs.npy",allow_pickle=True).tolist()
-        cannot_link_pairs = [(5, 4)]
+        # cannot_link_pairs = [(5, 4)]
 
         # Perform initial clustering
         adjusted_labels = constrained_dbscan_with_constraints(distance_matrix, eps, min_samples, must_link_pairs,
@@ -338,6 +381,7 @@ def iterative_training(all_texts, max_iterations=20, margin=1.0, temperature=0.0
     # edw evaza pairs gia dhmiourgia merikwn anchors
 
     # Iterative process
+    model.train()  # Set model to training mode
     for iteration in range(max_iterations):
         print(f"\nIteration {iteration}:")
 
@@ -363,9 +407,10 @@ def iterative_training(all_texts, max_iterations=20, margin=1.0, temperature=0.0
 
         # Step 3: Fine-Tune Model
         print("Fine-tuning model...")
-        optimizer = torch.optim.Adam(model.parameters(), lr=35e-5, weight_decay=1e-5)
 
         batches = assign_anchors_to_batches(all_texts, anchors, batch_size)
+
+        optimizer = torch.optim.Adam(model.parameters(), lr=35e-5, weight_decay=1e-5)
 
         # Adding epochs
         num_epochs = 1  # Define the number of epochs per iteration
@@ -435,12 +480,33 @@ def iterative_training(all_texts, max_iterations=20, margin=1.0, temperature=0.0
                 print(f"Must-Link Pairs with Batch Local indexes: {batch_must_link_pairs}")
                 print(f"Cannot-Link Pairs with Batch Local indexes: {batch_cannot_link_pairs}")
 
-                print("------------NEXT BATCH------------")
-
                 # Update model
                 optimizer.zero_grad()
+
+                # print("Gradients before backward pass:")
+                # for name, param in model.named_parameters():
+                #     if param.grad is not None:
+                #         print(name, param.grad)
+
                 combined_loss.backward()
+
+                # print("Gradients after backward pass:")
+                # for name, param in model.named_parameters():
+                #     if param.grad is not None:
+                #         print(name, param.grad)
+
+                # print("Model parameters before update:")
+                # for name, param in model.named_parameters():
+                #     print(name, param)
+
                 optimizer.step()
+
+                # print("Model parameters after update:")
+                # for name, param in model.named_parameters():
+                #     print(name, param)
+
+                # print("Embeddings before update:")
+                # print(sampled_embeddings)
 
                 # Recompute embeddings for the batch using the updated model
                 with torch.no_grad():
@@ -455,6 +521,13 @@ def iterative_training(all_texts, max_iterations=20, margin=1.0, temperature=0.0
                     sampled_embeddings[global_idx] = (
                             alpha * sampled_embeddings[global_idx] + (1 - alpha) * updated_batch_embeddings[local_idx]
                     )
+
+                print("Batch Embeddings updated")
+                # print(sampled_embeddings)
+                print("------------NEXT BATCH------------")
+
+        # Visualize clusters after each iteration
+        visualize_clusters(sampled_embeddings, range(len(sampled_embeddings)), method='tsne', iteration=iteration)
 
         # Step 4: Recompute Embeddings, Clusters, and Memory Bank
         print("Recomputing embeddings and clustering...")
@@ -542,7 +615,7 @@ def iterative_training(all_texts, max_iterations=20, margin=1.0, temperature=0.0
 
 
 def main():
-    data_path = "data/unlabeled_data/cleaned_texts_unlabeled.csv"  # Path to the CSV file
+    data_path = "data/unlabeled_data/cleaned_texts_unlabeled_cnn.csv"  # Path to the CSV file
     sampled_data = pd.read_csv(data_path, header=None)  # Load the CSV file (no headers)
     sampled_data.columns = ['ID', 'TEXT']  # Add column names to the CSV
 
@@ -551,11 +624,11 @@ def main():
     sampled_data = sampled_data[sampled_data['TEXT'].str.strip() != '']
 
     # Sample and prepare the data
-    sampled_data = sampled_data.sample(n=100, random_state=30)  # Randomly sample 100 rows
+    sampled_data = sampled_data.sample(n=100, random_state=56)  # Randomly sample # rows
     all_texts = sampled_data['TEXT'].tolist()
 
     # Run iterative training
-    iterative_training(all_texts, max_iterations=20, batch_size=32) # Run algorithm for 20 repetitions
+    iterative_training(all_texts, max_iterations=20, batch_size=32) # Run algorithm for # repetitions
 
 
 if __name__ == "__main__":
