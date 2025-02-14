@@ -140,7 +140,7 @@ def calculate_support_pair_loss(embeddings, must_link_pairs, cannot_link_pairs, 
 
     triplet_losses = []
 
-    # Identifying Positive and Negative Instances
+    # Identifying Positive and Negative Indexes
     for anchor_idx in range(embeddings.size(0)):
         positives = [j for (a, j) in must_link_pairs if a == anchor_idx] + \
                     [a for (a, j) in must_link_pairs if j == anchor_idx]
@@ -344,13 +344,13 @@ def iterative_training(all_texts, max_iterations=20, margin=1.0, temperature=0.0
         min_samples = int(input(f"Enter the min_samples value for initial clustering (default suggestion: 2): ") or 2)
 
         # Initialing empty ML & CL lists
-        must_link_pairs = []  # np.load("must_link_pairs.npy",allow_pickle=True).tolist()
-        cannot_link_pairs = []  # np.load("cannot_link_pairs.npy", allow_pickle=True).tolist()
+        # must_link_pairs = []  # np.load("must_link_pairs.npy",allow_pickle=True).tolist()
+        # cannot_link_pairs = []  # np.load("cannot_link_pairs.npy", allow_pickle=True).tolist()
 
         # Initialing empty ML & CL lists
-        # must_link_pairs = [(0, 1), (1, 2), (2, 3), (3, 5), (4, 6), (6, 9)]
+        must_link_pairs = [(0, 1), (1, 2), (2, 3), (3, 5), (4, 6), (6, 9)]
                              # np.load("must_link_pairs.npy",allow_pickle=True).tolist()
-        # cannot_link_pairs = [(5, 4)]
+        cannot_link_pairs = [(5, 4)]
 
         # Perform initial clustering
         adjusted_labels = constrained_dbscan_with_constraints(distance_matrix, eps, min_samples, must_link_pairs,
@@ -515,6 +515,10 @@ def iterative_training(all_texts, max_iterations=20, margin=1.0, temperature=0.0
                     updated_inputs = {key: val.to(device) for key, val in updated_inputs.items()}
                     updated_outputs = model(**updated_inputs)
                     updated_batch_embeddings = updated_outputs.last_hidden_state[:, 0, :]
+
+                print("Pre-normalization",torch.norm(updated_batch_embeddings, p=2, dim=1))
+                updated_batch_embeddings = F.normalize(updated_batch_embeddings, p=2, dim=1)  # L2 normalization
+                print("Post-normalization",torch.norm(updated_batch_embeddings, p=2, dim=1))
 
                 # Update memory bank using momentum
                 for local_idx, global_idx in enumerate(batch_indices):
