@@ -14,6 +14,7 @@ from sklearn.neighbors import NearestNeighbors
 import matplotlib.pyplot as plt
 # import os
 import random
+import json
 
 
 def save_k_distance_plot(embeddings, k=5, save_path="images/elbow_plot.png"):
@@ -344,13 +345,13 @@ def iterative_training(all_texts, max_iterations=20, margin=1.0, temperature=0.0
         min_samples = int(input(f"Enter the min_samples value for initial clustering (default suggestion: 2): ") or 2)
 
         # Initialing empty ML & CL lists
-        # must_link_pairs = []  # np.load("must_link_pairs.npy",allow_pickle=True).tolist()
-        # cannot_link_pairs = []  # np.load("cannot_link_pairs.npy", allow_pickle=True).tolist()
+        must_link_pairs = []  # np.load("must_link_pairs.npy",allow_pickle=True).tolist()
+        cannot_link_pairs = []  # np.load("cannot_link_pairs.npy", allow_pickle=True).tolist()
 
         # Initialing empty ML & CL lists
-        must_link_pairs = [(0, 1), (1, 2), (2, 3), (3, 5), (4, 6), (6, 9)]
+        # must_link_pairs = [(0, 1), (1, 2), (2, 3), (3, 5), (4, 6), (6, 9)]
                              # np.load("must_link_pairs.npy",allow_pickle=True).tolist()
-        cannot_link_pairs = [(5, 4)]
+        # cannot_link_pairs = [(5, 4)]
 
         # Perform initial clustering
         adjusted_labels = constrained_dbscan_with_constraints(distance_matrix, eps, min_samples, must_link_pairs,
@@ -606,10 +607,9 @@ def iterative_training(all_texts, max_iterations=20, margin=1.0, temperature=0.0
     # Convert numpy.int64 keys to int
     cluster_labels = {int(k): v for k, v in cluster_labels.items()}
     with open("./models/cluster_labels.json", "w") as f:
-        import json
         json.dump(cluster_labels, f)
 
-    print("Final memory bank and cluster labels saved!")
+    print("Cluster labels saved!")
     print(cluster_labels)
     # Save the fine-tuned model
     save_path = "./models/fine_tuned_bert.pth"
@@ -619,7 +619,7 @@ def iterative_training(all_texts, max_iterations=20, margin=1.0, temperature=0.0
 
 
 def main():
-    data_path = "data/unlabeled_data/cleaned_texts_unlabeled_cnn.csv"  # Path to the CSV file
+    data_path = "data/unlabeled_data/cleaned_texts_unlabeled_clear.csv"  # Path to the CSV file
     sampled_data = pd.read_csv(data_path, header=None)  # Load the CSV file (no headers)
     sampled_data.columns = ['ID', 'TEXT']  # Add column names to the CSV
 
