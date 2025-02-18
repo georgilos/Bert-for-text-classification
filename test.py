@@ -313,7 +313,7 @@ def find_anchors(must_link_pairs, cannot_link_pairs):
     return true_anchors
 
 
-def iterative_training(all_texts, max_iterations=20, margin=1.0, temperature=0.05, lambda_t=1.0, batch_size=32):
+def iterative_training(all_texts, max_iterations=50, margin=1.0, temperature=0.05, lambda_t=1.0, batch_size=32):
     """
     Perform iterative training with dynamic eps and min_samples selection.
     """
@@ -624,15 +624,15 @@ def main():
     sampled_data.columns = ['ID', 'TEXT']  # Add column names to the CSV
 
     # Clean and validate TEXT column
-    sampled_data['TEXT'] = sampled_data['TEXT'].fillna('').astype(str).str.replace(r'[\ufe0f\x0f]', '', regex=True)
+    sampled_data['TEXT'] = sampled_data['TEXT'].fillna('').astype(str).str.replace(r'[\ufe0f\x0f\u0964]', '', regex=True)
     sampled_data = sampled_data[sampled_data['TEXT'].str.strip() != '']
 
     # Sample and prepare the data
-    sampled_data = sampled_data.sample(n=100, random_state=56)  # Randomly sample # rows
+    sampled_data = sampled_data.sample(n=20, random_state=76)  # Randomly sample # rows
     all_texts = sampled_data['TEXT'].tolist()
 
     # Run iterative training
-    iterative_training(all_texts, max_iterations=20, batch_size=32) # Run algorithm for # repetitions
+    iterative_training(all_texts, max_iterations=50, batch_size=32) # Run algorithm for # repetitions
 
 
 if __name__ == "__main__":

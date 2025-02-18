@@ -44,8 +44,13 @@ def main():
     unlabeled_data = pd.read_csv('data/unlabeled_data/cleaned_texts_unlabeled_clear.csv', header=None, encoding='utf-8')
     # Because the .csv file has no headers, we must assign them
     unlabeled_data.columns = ['ID', 'TEXT']
+
+    unlabeled_data['TEXT'] = unlabeled_data['TEXT'].fillna('').astype(str).str.replace(r'[\ufe0f\x0f\u0964]', '',
+                                                                                   regex=True)
+    unlabeled_data = unlabeled_data[unlabeled_data['TEXT'].str.strip() != '']
+
     # Randomly select 100 rows
-    sampled_data = unlabeled_data.sample(n=40, random_state=21)  # Number of samples & random_state
+    sampled_data = unlabeled_data.sample(n=200, random_state=76)  # Number of samples & random_state
 
     # Initialize tokenizer and model
     tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')

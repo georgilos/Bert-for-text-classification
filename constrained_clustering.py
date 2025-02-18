@@ -349,7 +349,7 @@ def main():
     for cluster_id in np.unique(adjusted_labels):
         pd.set_option('display.max_colwidth', None)  # Set to None for unlimited width
         print(f"\nCluster {cluster_id}:")
-        print(clustered_data[clustered_data['CLUSTER'] == cluster_id].head(40))  # Inspect first 15 texts
+        print(clustered_data[clustered_data['CLUSTER'] == cluster_id].head(15))  # Inspect first 15 texts
 
     # Count the instances in each cluster
     cluster_counts = Counter(adjusted_labels)
