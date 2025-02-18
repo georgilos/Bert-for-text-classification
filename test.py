@@ -35,13 +35,14 @@ def save_k_distance_plot(embeddings, k=5, save_path="images/elbow_plot.png"):
     return distances
 
 
-def visualize_clusters(embeddings, labels, method='pca', iteration=None):
+def visualize_clusters(embeddings, cluster_labels, identifier, method='pca', iteration=None):
     """
     Visualize clusters using PCA, t-SNE, or UMAP and save the plot to the "images" folder.
 
     Parameters:
     - embeddings: Tensor containing the embeddings of all instances.
-    - labels: Cluster labels or instance IDs.
+    - cluster_labels: Cluster labels for each instance (e.g., output of constrained DBSCAN).
+    - identifier: List or array of instance IDs (e.g., numerical IDs or indices).
     - method: Dimensionality reduction method ('pca', 'tsne', or 'umap').
     - iteration: Current iteration number for naming the saved image file.
     """
@@ -60,14 +61,29 @@ def visualize_clusters(embeddings, labels, method='pca', iteration=None):
     # Reduce embeddings to 2D
     reduced_embeddings = reducer.fit_transform(embeddings.cpu().numpy())
 
+    # Create a color map for the clusters
+    unique_labels = np.unique(cluster_labels)
+    num_clusters = len(unique_labels)
+    colors = plt.colormaps['tab10'].resampled(num_clusters)  # Use a colormap with enough colors
+
     # Plot the clusters
     plt.figure(figsize=(12, 10))
-    plt.scatter(reduced_embeddings[:, 0], reduced_embeddings[:, 1], s=10)  # Plot points without color mapping
-    plt.title(f"Cluster Visualization ({method.upper()}) - Iteration {iteration}")
+    for i, label in enumerate(unique_labels):
+        # Get the points belonging to the current cluster
+        cluster_mask = (cluster_labels == label)
+        cluster_points = reduced_embeddings[cluster_mask]
+        cluster_identifiers = np.array(identifier)[cluster_mask]  # Get IDs for points in this cluster
 
-    # Annotate each point with its instance ID
-    for i, (x, y) in enumerate(reduced_embeddings):
-        plt.text(x, y, str(labels[i]), fontsize=8, ha='right', va='bottom')  # Add text annotation
+        # Plot the points with the corresponding color
+        plt.scatter(cluster_points[:, 0], cluster_points[:, 1],
+                    color=colors(i), label=f'Cluster {label}', s=10)
+
+        # Annotate each point with its instance ID
+        for idx, (x, y) in enumerate(cluster_points):
+            plt.text(x, y, str(cluster_identifiers[idx]), fontsize=8, ha='right', va='bottom')
+
+    plt.title(f"Cluster Visualization ({method.upper()}) - Iteration {iteration}")
+    plt.legend()  # Add a legend to show cluster labels
 
     # Save the plot to the "images" folder
     os.makedirs("images", exist_ok=True)
@@ -517,9 +533,9 @@ def iterative_training(all_texts, max_iterations=50, margin=1.0, temperature=0.0
                     updated_outputs = model(**updated_inputs)
                     updated_batch_embeddings = updated_outputs.last_hidden_state[:, 0, :]
 
-                print("Pre-normalization",torch.norm(updated_batch_embeddings, p=2, dim=1))
-                updated_batch_embeddings = F.normalize(updated_batch_embeddings, p=2, dim=1)  # L2 normalization
-                print("Post-normalization",torch.norm(updated_batch_embeddings, p=2, dim=1))
+                    print("Pre-normalization",torch.norm(updated_batch_embeddings, p=2, dim=1))
+                    updated_batch_embeddings = F.normalize(updated_batch_embeddings, p=2, dim=1)  # L2 normalization
+                    print("Post-normalization",torch.norm(updated_batch_embeddings, p=2, dim=1))
 
                 # Update memory bank using momentum
                 for local_idx, global_idx in enumerate(batch_indices):
@@ -532,7 +548,7 @@ def iterative_training(all_texts, max_iterations=50, margin=1.0, temperature=0.0
                 print("------------NEXT BATCH------------")
 
         # Visualize clusters after each iteration
-        visualize_clusters(sampled_embeddings, range(len(sampled_embeddings)), method='tsne', iteration=iteration)
+        visualize_clusters(sampled_embeddings, adjusted_labels, range(len(sampled_embeddings)), method='tsne', iteration=iteration)
 
         # Step 4: Recompute Embeddings, Clusters, and Memory Bank
         print("Recomputing embeddings and clustering...")
@@ -628,7 +644,7 @@ def main():
     sampled_data = sampled_data[sampled_data['TEXT'].str.strip() != '']
 
     # Sample and prepare the data
-    sampled_data = sampled_data.sample(n=20, random_state=76)  # Randomly sample # rows
+    sampled_data = sampled_data.sample(n=50, random_state=76)  # Randomly sample # rows
     all_texts = sampled_data['TEXT'].tolist()
 
     # Run iterative training
