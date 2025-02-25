@@ -12,6 +12,6 @@ Dropbox link: https://www.dropbox.com/scl/fo/brj59vrixis5rkz5182j3/h?rlkey=nnhu2
 - The model's weights, final cluster centroids and their classification labels will be saved in the **/models** directory
 - To generate labels for new unseen texts (**unseen_texts.csv**), run the  inference.py file
 
-### The "Active+Bert.ipynb" notebook uses Active learning techniques from Robert Monarch's repo: https://github.com/rmunro/pytorch_active_learning.git 
+### The "Active+Bert.ipynb" notebook uses Active learning techniques from Robert Monarch's repository: https://github.com/rmunro/pytorch_active_learning.git 
 
 ### The "test.py" uses the method presented in the paper https://arxiv.org/abs/2204.10008 and the constrained DBSCAN algorithms from the paper  https://link.springer.com/chapter/10.1007/978-3-540-72530-5_25
