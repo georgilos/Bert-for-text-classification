@@ -329,7 +329,7 @@ def find_anchors(must_link_pairs, cannot_link_pairs):
     return true_anchors
 
 
-def iterative_training(all_texts, max_iterations=50, margin=1.0, temperature=0.05, lambda_t=1.0, batch_size=32):
+def iterative_training(all_texts, max_iterations=50, margin=1.0, temperature=0.05, lambda_t=1.0, batch_size=16):
     """
     Perform iterative training with dynamic eps and min_samples selection.
     """
@@ -548,7 +548,7 @@ def iterative_training(all_texts, max_iterations=50, margin=1.0, temperature=0.0
                 print("------------NEXT BATCH------------")
 
         # Visualize clusters after each iteration
-        visualize_clusters(sampled_embeddings, adjusted_labels, range(len(sampled_embeddings)), method='tsne', iteration=iteration)
+        visualize_clusters(sampled_embeddings, adjusted_labels, range(len(sampled_embeddings)), method='pca', iteration=iteration)
 
         # Step 4: Recompute Embeddings, Clusters, and Memory Bank
         print("Recomputing embeddings and clustering...")
@@ -644,11 +644,11 @@ def main():
     sampled_data = sampled_data[sampled_data['TEXT'].str.strip() != '']
 
     # Sample and prepare the data
-    sampled_data = sampled_data.sample(n=50, random_state=76)  # Randomly sample # rows
+    sampled_data = sampled_data.sample(n=20, random_state=76)  # Randomly sample # rows
     all_texts = sampled_data['TEXT'].tolist()
 
     # Run iterative training
-    iterative_training(all_texts, max_iterations=50, batch_size=32) # Run algorithm for # repetitions
+    iterative_training(all_texts, max_iterations=50, batch_size=16) # Run algorithm for # repetitions
 
 
 if __name__ == "__main__":
