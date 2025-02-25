@@ -2,9 +2,9 @@ This repository is part of my thesis on training a LLM like BERT for hatespeech 
 
 Dropbox link: https://www.dropbox.com/scl/fo/brj59vrixis5rkz5182j3/h?rlkey=nnhu2eoh48wutke73ezntvs3w&st=x5iiz72a&dl=0
 
-## Methods presented here:
-- Active learning with outliers and low confidence sampling (Active+BERT.ipynb)
-- Support pair active learning (test.py)
+## Methods presented:
+- Active learning with outliers and low confidence (**Active+BERT.ipynb**)
+- Support pair active learning with Hybrid loss (**test.py**)
 
 ## Execution (for the test.py):
 - Before running, adjust the **max_iterations** and **n** (samples) variables 
