@@ -533,9 +533,9 @@ def iterative_training(all_texts, max_iterations=50, margin=1.0, temperature=0.0
                     updated_outputs = model(**updated_inputs)
                     updated_batch_embeddings = updated_outputs.last_hidden_state[:, 0, :]
 
-                    print("Pre-normalization",torch.norm(updated_batch_embeddings, p=2, dim=1))
+                    print("Pre-normalization", torch.norm(updated_batch_embeddings, p=2, dim=1))
                     updated_batch_embeddings = F.normalize(updated_batch_embeddings, p=2, dim=1)  # L2 normalization
-                    print("Post-normalization",torch.norm(updated_batch_embeddings, p=2, dim=1))
+                    print("Post-normalization", torch.norm(updated_batch_embeddings, p=2, dim=1))
 
                 # Update memory bank using momentum
                 for local_idx, global_idx in enumerate(batch_indices):

@@ -3,8 +3,6 @@ import numpy as np
 from collections import deque
 import matplotlib.pyplot as plt
 from sklearn.decomposition import PCA
-# from sklearn.manifold import TSNE
-# import umap
 from collections import Counter
 import torch
 import torch.nn.functional as F
@@ -82,18 +80,6 @@ def constrained_dbscan_with_constraints(distance_matrix, eps, min_samples, must_
                         cluster_points.add(neighbor)
                         queue.append(neighbor)
 
-            """"
-            is_valid = True
-            for other_point in cluster_points:
-                if current_point in cannot_link_dict[other_point]:  # If the point violates a cannot-link constraint
-                    is_valid = False
-                    break  # Stop checking if violation is found
-
-            if not is_valid:
-                # Handle cannot-link violation:
-                # labels[current_point] = -1  # Option 1: Assign to noise
-                continue  # Option 2: Skip this point and prevent further expansion
-            """
             visited[current_point] = True  # When a point passes the constraint check, mark it as
             cluster_points.add(current_point)  # Add point to the cluster_points list
 
@@ -158,99 +144,46 @@ def constrained_dbscan_with_constraints(distance_matrix, eps, min_samples, must_
 
 def compute_cluster_centroids(embeddings, cluster_labels):
     """
-    Initialize the memory bank with cluster centroids (PyTorch version).
-
     Parameters:
     - embeddings (torch.Tensor): Embeddings of all data points (n x d).
     - cluster_labels (torch.Tensor): Cluster labels for each data point.
 
     Returns:
-    - memory_bank (dict): A dictionary where keys are cluster IDs and values are centroids.
+    - Cluster_centroids (dict): A dictionary where keys are cluster IDs and values are centroids.
     """
     centroids = {}  # Initialize dict
-    # Ensure cluster_labels is a PyTorch tensor:
-    # if not isinstance(cluster_labels, torch.Tensor):  # Remove if memory bank has errors
-    #     cluster_labels = torch.tensor(cluster_labels, dtype=torch.int64)  # Remove if memory bank has errors
+
     # Ensure cluster_labels are on the same device as embeddings:
     cluster_labels = cluster_labels.to(embeddings.device)
-    unique_clusters = torch.unique(cluster_labels[cluster_labels != -1])  # Exclude noise (-1)
+
+    # Exclude noise (-1)
+    unique_clusters = torch.unique(cluster_labels[cluster_labels != -1])
+
     for cluster in unique_clusters:
+
         # Convert a scalar tensor, into a standard PyTorch tensor
         cluster_tensor = torch.tensor(cluster.item(), dtype=torch.int64, device=cluster_labels.device)
+
         # Find the indices of the data points that belong to the current cluster
         cluster_indices = torch.where(cluster_labels == cluster_tensor)[0]  # Find points in the cluster
         # cluster_indices = torch.where(cluster_labels == cluster)[0]
 
-        cluster_embeddings = embeddings[cluster_indices]  # Get embeddings for the cluster
-        # centroid = cluster_embeddings.mean(dim=0)  # Compute centroid
+        # Get embeddings for the cluster
+        cluster_embeddings = embeddings[cluster_indices]
+
         # Compute centroid
         centroid = cluster_embeddings.mean(dim=0)
 
         # Normalize centroid
-        # centroid = F.normalize(centroid, p=2, dim=0)
-        centroids[int(cluster.item())] = centroid  # Store as tensor in memory bank
+        print("Pre-normalization", torch.norm(centroid, p=2, dim=0))
+        centroid = F.normalize(centroid, p=2, dim=0)
+        print("Post-normalization", torch.norm(centroid, p=2, dim=0))
+
+        # Store as tensor in memory bank
+        centroids[int(cluster.item())] = centroid
+
     return centroids
 
-# NOT USED
-""""
-def merge_small_clusters(distance_matrix, labels, cannot_link_dict, min_samples):
-    
-    unique_labels = np.unique(labels[labels != -1])  # Exclude -1 (noise) from unique_labels
-    cluster_counts = Counter(labels)
-
-    # Handle singleton clusters:
-    for cluster_id in unique_labels:
-        if cluster_counts[cluster_id] == 1:  # Check for singleton clusters
-            labels[labels == cluster_id] = -1  # Assign to noise
-
-    # Update unique_labels and cluster_counts after singleton handling
-    unique_labels = np.unique(labels[labels != -1])
-    cluster_counts = Counter(labels)
-
-    for cluster_id in unique_labels:
-        # Check if cluster is empty:
-        if cluster_counts[cluster_id] == 0:
-            continue  # Skip empty cluster
-
-        if cluster_counts[cluster_id] < min_samples:  # Cluster smaller than min_samples
-
-            # Find the indices of the instances in the small cluster
-            small_cluster_indices = np.where(labels == cluster_id)[0]
-
-            # Calculate distances to other clusters (using a representative point)
-            min_distance = float('inf')
-            nearest_cluster_id = -1
-
-            for other_cluster_id in unique_labels:
-                if other_cluster_id != cluster_id and cluster_counts[other_cluster_id] >= min_samples:
-                    # Get a representative point from the other cluster (e.g., its first point)
-                    other_cluster_index = np.where(labels == other_cluster_id)[0][0]
-
-                    # Calculate average distance from small cluster points to representative point
-                    distances = distance_matrix[small_cluster_indices, other_cluster_index]
-                    average_distance = np.mean(distances)
-
-                    if average_distance < min_distance:
-                        # Check for cannot-link constraint violations with all points in the small cluster
-                        is_valid_merge = True
-                        for point_in_small_cluster in small_cluster_indices:
-                            for point_in_other_cluster in np.where(labels == other_cluster_id)[0]:
-                                if point_in_small_cluster in cannot_link_dict.get(point_in_other_cluster, set()):
-                                    is_valid_merge = False
-                                    break
-                            if not is_valid_merge:
-                                break
-
-                        if is_valid_merge:
-                            min_distance = average_distance
-                            nearest_cluster_id = other_cluster_id
-
-            # Merge if a valid nearest cluster is found
-            if nearest_cluster_id != -1:
-                labels[labels == cluster_id] = nearest_cluster_id
-
-    return labels
-"""""
 
 def relabel_clusters(labels):
     """Relabels cluster IDs to be consecutive integers starting from 0."""
@@ -289,9 +222,6 @@ def main():
         print("Error: 'sampled_data.csv' file not found. Make sure the file is in the working directory.")
         exit()
 
-    print(sampled_data.head(20))
-    all_texts = sampled_data['TEXT'].tolist()
-
     # Prompt the user for parameters
     try:
         eps = float(input("\nEnter the value for eps (e.g., 0.13): "))
@@ -314,7 +244,6 @@ def main():
 
     # Relabeling clusters
     adjusted_labels = relabel_clusters(adjusted_labels)
-    # adjusted_labels = merge_small_clusters(distance_matrix, adjusted_labels, cannot_link_dict, min_samples)
 
     # Calculate and print noise points
     noise_points = [i for i, label in enumerate(adjusted_labels) if label == -1]
@@ -323,9 +252,11 @@ def main():
     reduced_embeddings = PCA(n_components=2).fit_transform(distance_matrix)
 
     # Reduce distance matrix to 2D for visualization using t-SNE
+    # from sklearn.manifold import TSNE
     # reduced_embeddings = TSNE(n_components=2, random_state=42).fit_transform(distance_matrix)
 
     # Reduce distance matrix to 2D for visualization using UMAP
+    # import umap
     # reducer = umap.UMAP(n_components=2, random_state=42)
     # reduced_embeddings = reducer.fit_transform(distance_matrix)
 
@@ -337,11 +268,24 @@ def main():
     plt.colorbar(label="Cluster Labels")
     plt.title("Cluster Visualization")
 
+    # Create incremental IDs
+    incremental_ids = list(range(len(sampled_data)))
+
+    # Add IDs as text annotations next to each point
+    for i, point in enumerate(reduced_embeddings):
+        plt.annotate(str(incremental_ids[i]),  # Use ID from sampled_data
+                     xy=(point[0], point[1]),
+                     xytext=(5, 5),  # Offset the label slightly
+                     textcoords='offset points',
+                     fontsize=8)
+
     # Combine embeddings, labels, and texts into a DataFrame
+    all_texts = sampled_data['TEXT'].tolist()
     clustered_data = pd.DataFrame({
         'TEXT': all_texts,
         'CLUSTER': adjusted_labels  # From clustering
     })
+
     # The following line is added to resolve some unreadable character encoding problems
     clustered_data['TEXT'] = clustered_data['TEXT'].apply(lambda text: re.sub(r'\ufe0f', '', text))
 
