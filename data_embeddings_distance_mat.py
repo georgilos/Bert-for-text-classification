@@ -21,10 +21,9 @@ def generate_embeddings(texts, tokenizer, model, batch_size=32):
 
         with torch.no_grad():
             outputs = model(**inputs)
-            # Extract [CLS] token embedding
-            # `outputs.last_hidden_state` is a tensor of shape (batch_size, sequence_length, hidden_size)
-            # We use the `[CLS]` token's embedding for each sentence (index 0 along sequence_length)
-            batch_embeddings = outputs.last_hidden_state[:, 0, :]
+
+            batch_embeddings = outputs.pooler_output  # outputs.last_hidden_state[:, 0, :]
+
         print("Pre-normalization", torch.norm(batch_embeddings, p=2, dim=1))
         batch_embeddings = F.normalize(batch_embeddings, p=2, dim=1)  # L2 normalization
         print("Post-normalization", torch.norm(batch_embeddings, p=2, dim=1))

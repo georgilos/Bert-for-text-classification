@@ -8,7 +8,6 @@ from scipy.spatial.distance import cdist
 from constrained_clustering import constrained_dbscan_with_constraints, relabel_clusters, compute_cluster_centroids
 from uncertain_pairs import select_uncertain_pairs, annotate_and_update_constraints
 from data_embeddings_distance_mat import generate_embeddings
-# from hybrid_loss_training import calculate_contrastive_loss, calculate_support_pair_loss
 import torch.nn.functional as F
 from sklearn.neighbors import NearestNeighbors
 import matplotlib.pyplot as plt
@@ -419,7 +418,7 @@ def iterative_training(all_texts, max_iterations=50, margin=1.0, temperature=0.0
         else:
             print("No anchors found.")
 
-        # Call the debug_pair_distances function
+        # Call the debug_pair_distances function that prints the distances
         debug_pair_distances(sampled_embeddings, must_link_pairs, cannot_link_pairs)
 
         # Step 3: Fine-Tune Model
@@ -531,7 +530,7 @@ def iterative_training(all_texts, max_iterations=50, margin=1.0, temperature=0.0
                                                max_length=128)
                     updated_inputs = {key: val.to(device) for key, val in updated_inputs.items()}
                     updated_outputs = model(**updated_inputs)
-                    updated_batch_embeddings = updated_outputs.last_hidden_state[:, 0, :]
+                    updated_batch_embeddings = updated_outputs.pooler_output # updated_outputs.last_hidden_state[:, 0, :]
 
                     print("Pre-normalization", torch.norm(updated_batch_embeddings, p=2, dim=1))
                     updated_batch_embeddings = F.normalize(updated_batch_embeddings, p=2, dim=1)  # L2 normalization
@@ -648,7 +647,7 @@ def main():
     all_texts = sampled_data['TEXT'].tolist()
 
     # Run iterative training
-    iterative_training(all_texts, max_iterations=50, batch_size=16) # Run algorithm for # repetitions
+    iterative_training(all_texts, max_iterations=50, batch_size=32) # Run algorithm for # repetitions
 
 
 if __name__ == "__main__":
