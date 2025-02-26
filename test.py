@@ -328,7 +328,7 @@ def find_anchors(must_link_pairs, cannot_link_pairs):
     return true_anchors
 
 
-def iterative_training(all_texts, max_iterations=50, margin=1.0, temperature=0.05, lambda_t=1.0, batch_size=16):
+def iterative_training(all_texts, max_iterations=50, margin=1.0, temperature=1.0, lambda_t=1.0, batch_size=32):
     """
     Perform iterative training with dynamic eps and min_samples selection.
     """
