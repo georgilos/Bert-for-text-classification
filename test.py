@@ -634,7 +634,7 @@ def iterative_training(all_texts, max_iterations=50, margin=1.0, temperature=1.0
 
 
 def main():
-    data_path = "data/unlabeled_data/cleaned_texts_unlabeled_clear.csv"  # Path to the CSV file
+    data_path = "data/unlabeled_data/unlabeled_kaggle_texts.csv"  # data/unlabeled_data/unlabeled_cnn_texts.csv
     sampled_data = pd.read_csv(data_path, header=None)  # Load the CSV file (no headers)
     sampled_data.columns = ['ID', 'TEXT']  # Add column names to the CSV
 
@@ -647,7 +647,7 @@ def main():
     all_texts = sampled_data['TEXT'].tolist()
 
     # Run iterative training
-    iterative_training(all_texts, max_iterations=50, batch_size=32) # Run algorithm for # repetitions
+    iterative_training(all_texts, max_iterations=50, batch_size=32)  # Run algorithm for # repetitions
 
 
 if __name__ == "__main__":

@@ -261,8 +261,8 @@ def main():
     all_texts = sampled_data['TEXT'].tolist()
 
     # Initialize constraints
-    must_link_pairs = []
-    cannot_link_pairs = []
+    must_link_pairs = [(0, 1), (1, 2), (2, 3), (3, 5), (4, 6),(6, 9)]  # np.load("must_link_pairs.npy",allow_pickle=True).tolist()
+    cannot_link_pairs = [(5, 4)]
 
     # Select uncertain pairs
     uncertain_positive_pairs, uncertain_negative_pairs = select_uncertain_pairs(distance_matrix, adjusted_labels, must_link_pairs, cannot_link_pairs)

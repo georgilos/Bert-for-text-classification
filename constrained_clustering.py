@@ -2,7 +2,6 @@ import pandas as pd
 import numpy as np
 from collections import deque
 import matplotlib.pyplot as plt
-from sklearn.decomposition import PCA
 from collections import Counter
 import torch
 import torch.nn.functional as F
@@ -231,7 +230,7 @@ def main():
         exit()
 
     # Initialing ML & CL lists. Add the ML (0,9) pair for a conflict
-    # must_link_pairs = [(0,1),(1,2),(2,3),(3,5),(4,6),(6,9)]  # np.load("must_link_pairs.npy",allow_pickle=True).tolist()
+    # must_link_pairs = [(0,1),(1,2),(2,3),(3,5),(4,6),(6,9)]
     # cannot_link_pairs = [(5,4)]  # np.load("cannot_link_pairs.npy", allow_pickle=True).tolist()
 
     must_link_pairs = []
@@ -239,7 +238,7 @@ def main():
 
     # Apply constrained DBSCAN
     adjusted_labels = constrained_dbscan_with_constraints(
-        distance_matrix, eps,min_samples, must_link_pairs, cannot_link_pairs
+        distance_matrix, eps, min_samples, must_link_pairs, cannot_link_pairs
     )
 
     # Relabeling clusters
@@ -249,6 +248,7 @@ def main():
     noise_points = [i for i, label in enumerate(adjusted_labels) if label == -1]
 
     # Reduce distance matrix to 2D for visualization
+    from sklearn.decomposition import PCA
     reduced_embeddings = PCA(n_components=2).fit_transform(distance_matrix)
 
     # Reduce distance matrix to 2D for visualization using t-SNE

@@ -24,9 +24,9 @@ def generate_embeddings(texts, tokenizer, model, batch_size=32):
 
             batch_embeddings = outputs.pooler_output  # outputs.last_hidden_state[:, 0, :]
 
-        print("Pre-normalization", torch.norm(batch_embeddings, p=2, dim=1))
+        # print("Pre-normalization", torch.norm(batch_embeddings, p=2, dim=1))
         batch_embeddings = F.normalize(batch_embeddings, p=2, dim=1)  # L2 normalization
-        print("Post-normalization", torch.norm(batch_embeddings, p=2, dim=1))
+        # print("Post-normalization", torch.norm(batch_embeddings, p=2, dim=1))
         embeddings.append(batch_embeddings)
 
     # Stack all embeddings into a single tensor
@@ -36,13 +36,14 @@ def generate_embeddings(texts, tokenizer, model, batch_size=32):
 def main():
 
     # Load unlabeled data
-    unlabeled_data = pd.read_csv('data/unlabeled_data/cleaned_texts_unlabeled_clear.csv', header=None, encoding='utf-8')
+    unlabeled_data = pd.read_csv('data/unlabeled_data/unlabeled_kaggle_texts.csv', header=None, encoding='utf-8')
 
     # Because the .csv file has no headers, we must assign them
     unlabeled_data.columns = ['ID', 'TEXT']
 
     # Remove some non-printable characters that caused errors
-    unlabeled_data['TEXT'] = unlabeled_data['TEXT'].fillna('').astype(str).str.replace(r'[\ufe0f\x0f\u0964]', '', regex=True)
+    unlabeled_data['TEXT'] = unlabeled_data['TEXT'].fillna('').astype(str).str.replace(r'[\ufe0f\x0f\u0964]', '',
+                                                                                       regex=True)
 
     # Remove empty lines
     unlabeled_data = unlabeled_data[unlabeled_data['TEXT'].str.strip() != '']

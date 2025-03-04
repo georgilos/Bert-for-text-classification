@@ -64,7 +64,7 @@ def main():
     model_path = "./models/fine_tuned_bert.pth"
     memory_bank_path = "./models/final_centroids.pt"
     cluster_labels_path = "./models/cluster_labels.json"
-    input_texts_path = "./data/unseen_texts.csv"  # File containing unseen texts
+    input_texts_path = "./data/data_for_inference/unseen_texts.csv"  # File containing unseen texts
     output_predictions_path = "./results/predictions.csv"
 
     # Load the model, memory bank, and cluster labels
